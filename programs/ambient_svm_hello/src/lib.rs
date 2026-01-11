@@ -16,7 +16,7 @@ pub mod ambient_svm_hello {
         Ok(())
     }
 
-    // nonce нужен только чтобы делать уникальные PDA для разных запросов
+
     pub fn create_request(ctx: Context<CreateRequest>, prompt: String, nonce: u64) -> Result<()> {
         require!(prompt.as_bytes().len() <= MAX_PROMPT_LEN, ErrorCode::PromptTooLong);
 

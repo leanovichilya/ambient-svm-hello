@@ -70,7 +70,7 @@ async function main() {
 
     console.log("model response:", responseText);
 
-    // receipt root (если есть)
+    // receipt root
     const merkleRoot = data?.receipt?.merkle_root ?? data?.merkle_root ?? null;
     const receiptRootBytes = merkleRoot
         ? Array.from(Buffer.from(String(merkleRoot).replace(/^0x/, ""), "hex"))

@@ -10,7 +10,7 @@ node_modules/
 # IDE
 .idea/
 
-# Yarn Berry cache (не обязательно коммитить)
+# Yarn Berry cache
 .yarn/cache/
 .yarn/unplugged/
 .yarn/build-state.yml
