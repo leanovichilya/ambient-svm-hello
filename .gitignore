@@ -1,0 +1,21 @@
+# build
+target/
+
+# deps
+node_modules/
+
+# secrets
+.env
+
+# IDE
+.idea/
+
+# Yarn Berry cache (не обязательно коммитить)
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# OS
+.DS_Store
+.anchor/

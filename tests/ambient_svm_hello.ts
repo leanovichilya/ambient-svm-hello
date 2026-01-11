@@ -1,0 +1,59 @@
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { AmbientSvmHello } from "../target/types/ambient_svm_hello";
+
+describe("ambient_svm_hello (devnet)", () => {
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
+
+  const program = anchor.workspace.AmbientSvmHello as Program<AmbientSvmHello>;
+
+  it("init_config (if needed) + create_request", async () => {
+    const user = provider.wallet.publicKey;
+
+    const [configPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
+
+    // init config only once (skip if already exists)
+    const cfgInfo = await provider.connection.getAccountInfo(configPda);
+    if (!cfgInfo) {
+      await program.methods
+        .initConfig(user) // relayer = same wallet for now
+        .accounts({
+          config: configPda,
+          admin: user,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+      console.log("config inited:", configPda.toBase58());
+    } else {
+      console.log("config already exists:", configPda.toBase58());
+    }
+
+    const prompt = "Hello World on-chain. Reply with 1 short sentence.";
+    const nonce = new anchor.BN(Date.now()); // unique enough
+
+    const [requestPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("req"), user.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+
+    await program.methods
+      .createRequest(prompt, nonce)
+      .accounts({
+        config: configPda,
+        request: requestPda,
+        user,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
+
+    console.log("request created:", requestPda.toBase58());
+
+    const req = await program.account.request.fetch(requestPda);
+    console.log("status:", req.status);
+    console.log("prompt:", req.prompt);
+  });
+});
