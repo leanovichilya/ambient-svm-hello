@@ -52,7 +52,6 @@ function parseDecision(text: string): number {
                 return normalizeWinner(String(parsed.winner));
             }
         } catch {
-            // fall through to regex parsing
         }
     }
 
@@ -86,7 +85,6 @@ async function main() {
     const requestPda = new anchor.web3.PublicKey(requestPdaStr);
 
 
-    // 1) read on-chain inputs
     const req = await program.account.judgeRequest.fetch(requestPda);
     const criteria: string = req.criteria;
     const inputA: string = req.inputA;
@@ -96,7 +94,6 @@ async function main() {
     console.log("input A:", inputA);
     console.log("input B:", inputB);
 
-    // 2) call Ambient Web2 inference (no stream)
     const res = await fetch("https://api.ambient.xyz/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -132,18 +129,15 @@ async function main() {
 
     console.log("model response:", responseText);
 
-    // receipt root
     const merkleRoot = data?.receipt?.merkle_root ?? data?.merkle_root ?? null;
     const receiptRootBytes = merkleRoot
         ? Array.from(Buffer.from(String(merkleRoot).replace(/^0x/, ""), "hex"))
         : new Array(32).fill(0);
 
-    // 3) parse decision + hash response
     const decision = parseDecision(responseText);
     console.log("parsed decision:", decision);
     const responseHash = sha256Bytes(responseText);
 
-    // 4) fulfill on-chain
     const sig = await program.methods
         .fulfillJudgeRequest(decision, responseHash as any, receiptRootBytes as any)
         .accounts({
@@ -154,7 +148,6 @@ async function main() {
 
     console.log("fulfilled tx:", sig);
 
-    // 5) verify on-chain state
     const updated = await program.account.judgeRequest.fetch(requestPda);
     console.log("updated status:", updated.status);
     console.log("stored decision:", updated.decision);

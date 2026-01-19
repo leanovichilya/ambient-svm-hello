@@ -17,11 +17,10 @@ describe("ambient_svm_hello (devnet)", () => {
       program.programId
     );
 
-    // init config only once (skip if already exists)
     const cfgInfo = await provider.connection.getAccountInfo(configPda);
     if (!cfgInfo) {
       await program.methods
-        .initConfig(user) // relayer = same wallet for now
+        .initConfig(user)
         .accounts({
           config: configPda,
           admin: user,
@@ -36,7 +35,7 @@ describe("ambient_svm_hello (devnet)", () => {
     const criteria = "Pick the clearer and more helpful response.";
     const inputA = "Here is a vague answer with no specifics.";
     const inputB = "This response is concise, specific, and addresses the question.";
-    const nonce = new anchor.BN(Date.now()); // unique enough
+    const nonce = new anchor.BN(Date.now());
 
     const [requestPda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("req"), user.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],

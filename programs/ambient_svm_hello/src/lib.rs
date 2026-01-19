@@ -40,10 +40,10 @@ pub mod ambient_svm_hello {
 
         let req = &mut ctx.accounts.request;
         req.authority = ctx.accounts.user.key();
-        req.status = 0; // 0 = pending, 1 = fulfilled
+        req.status = 0;
         req.nonce = nonce;
 
-        req.decision = 0; // 0 = unset, 1 = A, 2 = B, 3 = tie
+        req.decision = 0;
 
         req.criteria = criteria;
         req.input_a = input_a;
@@ -156,16 +156,16 @@ pub struct JudgeRequest {
 
 impl JudgeRequest {
     pub fn space() -> usize {
-        8   // discriminator
-        + 32 // authority
-        + 1  // status
-        + 8  // nonce
-        + 1  // decision
-        + 32 // response_hash
-        + 32 // receipt_root
-        + 4 + MAX_CRITERIA_LEN // criteria string prefix + bytes
-        + 4 + MAX_INPUT_LEN // input_a string prefix + bytes
-        + 4 + MAX_INPUT_LEN // input_b string prefix + bytes
+        8
+        + 32
+        + 1
+        + 8
+        + 1
+        + 32
+        + 32
+        + 4 + MAX_CRITERIA_LEN
+        + 4 + MAX_INPUT_LEN
+        + 4 + MAX_INPUT_LEN
     }
 }
 
