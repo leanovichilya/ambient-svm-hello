@@ -33,13 +33,13 @@ SVM programs can't do HTTP, so the AI call is done off-chain. On-chain stores a 
 - Off-chain trust: relayer can lie about the decision; hash/receipt only help with auditing.
 - No on-chain verification of model behavior or bias.
 - Single judge; no quorum or appeal process.
-- Fixed input sizes (280 bytes each) and plain text only.
+- Fixed input sizes (512 bytes each) and plain text only.
 
 ## Example run (devnet)
-- Request PDA: GsDXE3GTbbovoXmpZDkAEKurAANUbUpvScnfAd7q6vbG (Explorer: https://explorer.solana.com/address/GsDXE3GTbbovoXmpZDkAEKurAANUbUpvScnfAd7q6vbG?cluster=devnet)
-- Fulfill tx: VFc2JskmNNRnENpF97ZUxqwokQyBV8UQUVqGmRSKwM1S78TrdWBXRSGmTCZutR9neBVXS1o5qYsGaoHrc4KLM15 (Explorer: https://explorer.solana.com/tx/VFc2JskmNNRnENpF97ZUxqwokQyBV8UQUVqGmRSKwM1S78TrdWBXRSGmTCZutR9neBVXS1o5qYsGaoHrc4KLM15?cluster=devnet)
+- Request PDA: 7CAnpfuLudjoY322fkVc5jyEDtyhmuTQi1EYHQmD7ErT (Explorer: https://explorer.solana.com/address/7CAnpfuLudjoY322fkVc5jyEDtyhmuTQi1EYHQmD7ErT?cluster=devnet)
+- Fulfill tx: LcTv2iTUgfTkjqxfEbVoZJmbTCNvya2V9fZcHAZHZJz2CWbKigcwwdHHuzh3vhmcHNptEr9KvaUT3HMXzo16544 (Explorer: https://explorer.solana.com/tx/LcTv2iTUgfTkjqxfEbVoZJmbTCNvya2V9fZcHAZHZJz2CWbKigcwwdHHuzh3vhmcHNptEr9KvaUT3HMXzo16544?cluster=devnet)
 - Decision: 2 (B)
-- Response hash (sha256): 0xea38c93f2c845444e9f31dba32df6e046154308fe353f93fdd4788e5689cb0fc
+- Response hash (sha256): 0x4cc8bfb2e5dc9528dd279983741e6f16ccbf22bf91d300cb0d4dcd874d8344f1
 
 ### Env vars
 Copy `.env.example` to `.env` and fill in secrets.

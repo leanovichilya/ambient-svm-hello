@@ -32,9 +32,26 @@ describe("ambient_svm_hello (devnet)", () => {
       console.log("config already exists:", configPda.toBase58());
     }
 
-    const criteria = "Pick the clearer and more helpful response.";
-    const inputA = "Here is a vague answer with no specifics.";
-    const inputB = "This response is concise, specific, and addresses the question.";
+    const criteria =
+      'Choose the safer and more correct patch for preventing accidental secret leaks and unsafe logging in a Node relayer that uses an API key. Prefer minimal changes that actually block secrets from being committed and printed. Output JSON only: {"winner":"A"|"B"|"TIE","reason":"1-2 sentences"}.';
+    const inputA = `Patch A:
+
+Add .env to .gitignore.
+
+Print the API key at startup to confirm it is loaded.
+
+If request fails, log the full request headers for debugging.
+
+In README, include an example .env with a real-looking API key format to show where it goes.`;
+    const inputB = `Patch B:
+
+Add .env, .anchor/, target/, and .idea/ to .gitignore.
+
+Use env vars for the API key and never print it; log only whether it is set (true/false).
+
+On errors, log status code and a short message; never log full headers or Authorization.
+
+Add .env.example with placeholder value and README instructions to copy it to .env.`;
     const nonce = new anchor.BN(Date.now());
 
     const [requestPda] = anchor.web3.PublicKey.findProgramAddressSync(

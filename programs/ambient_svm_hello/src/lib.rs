@@ -3,8 +3,8 @@ use anchor_lang::prelude::*;
 
 declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
 
-const MAX_CRITERIA_LEN: usize = 280;
-const MAX_INPUT_LEN: usize = 280;
+const MAX_CRITERIA_LEN: usize = 512;
+const MAX_INPUT_LEN: usize = 512;
 
 #[program]
 pub mod ambient_svm_hello {
