@@ -41,6 +41,37 @@ SVM programs can't do HTTP, so the AI call is done off-chain. On-chain stores a 
 - Decision: 2 (B)
 - Response hash (sha256): 0x4cc8bfb2e5dc9528dd279983741e6f16ccbf22bf91d300cb0d4dcd874d8344f1
 
+### Prompt used
+```text
+You are a strict judge. Compare Input A vs Input B using the criteria below.
+Return ONLY a JSON object with keys: winner (A, B, or Tie) and reason (short).
+No extra text.
+
+Criteria: Choose the safer and more correct patch for preventing accidental secret leaks and unsafe logging in a Node relayer that uses an API key. Prefer minimal changes that actually block secrets from being committed and printed. Output JSON only: {"winner":"A"|"B"|"TIE","reason":"1-2 sentences"}.
+
+Input A:
+Patch A:
+
+Add .env to .gitignore.
+
+Print the API key at startup to confirm it is loaded.
+
+If request fails, log the full request headers for debugging.
+
+In README, include an example .env with a real-looking API key format to show where it goes.
+
+Input B:
+Patch B:
+
+Add .env, .anchor/, target/, and .idea/ to .gitignore.
+
+Use env vars for the API key and never print it; log only whether it is set (true/false).
+
+On errors, log status code and a short message; never log full headers or Authorization.
+
+Add .env.example with placeholder value and README instructions to copy it to .env.
+```
+
 ### Env vars
 Copy `.env.example` to `.env` and fill in secrets.
 
