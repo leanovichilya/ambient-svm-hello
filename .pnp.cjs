@@ -33,6 +33,7 @@ const RAW_RUNTIME_STATE =
           ["@types/chai", "npm:4.3.20"],\
           ["@types/mocha", "npm:9.1.1"],\
           ["chai", "npm:4.5.0"],\
+          ["dotenv", "npm:16.6.1"],\
           ["mocha", "npm:9.2.2"],\
           ["prettier", "npm:2.8.8"],\
           ["root-workspace-0b6124", "workspace:."],\
@@ -994,6 +995,15 @@ const RAW_RUNTIME_STATE =
         "packageLocation": "../.yarn/berry/cache/diff-npm-5.0.0-ad6900db18-10c0.zip/node_modules/diff/",\
         "packageDependencies": [\
           ["diff", "npm:5.0.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["dotenv", [\
+      ["npm:16.6.1", {\
+        "packageLocation": "../.yarn/berry/cache/dotenv-npm-16.6.1-01334288ea-10c0.zip/node_modules/dotenv/",\
+        "packageDependencies": [\
+          ["dotenv", "npm:16.6.1"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -2045,6 +2055,7 @@ const RAW_RUNTIME_STATE =
           ["@types/chai", "npm:4.3.20"],\
           ["@types/mocha", "npm:9.1.1"],\
           ["chai", "npm:4.5.0"],\
+          ["dotenv", "npm:16.6.1"],\
           ["mocha", "npm:9.2.2"],\
           ["prettier", "npm:2.8.8"],\
           ["root-workspace-0b6124", "workspace:."],\

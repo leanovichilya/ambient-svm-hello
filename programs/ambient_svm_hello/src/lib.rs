@@ -3,7 +3,8 @@ use anchor_lang::prelude::*;
 
 declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
 
-const MAX_PROMPT_LEN: usize = 280;
+const MAX_CRITERIA_LEN: usize = 280;
+const MAX_INPUT_LEN: usize = 280;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -17,15 +18,36 @@ pub mod ambient_svm_hello {
     }
 
 
-    pub fn create_request(ctx: Context<CreateRequest>, prompt: String, nonce: u64) -> Result<()> {
-        require!(prompt.as_bytes().len() <= MAX_PROMPT_LEN, ErrorCode::PromptTooLong);
+    pub fn create_judge_request(
+        ctx: Context<CreateJudgeRequest>,
+        criteria: String,
+        input_a: String,
+        input_b: String,
+        nonce: u64,
+    ) -> Result<()> {
+        require!(
+            criteria.as_bytes().len() <= MAX_CRITERIA_LEN,
+            ErrorCode::CriteriaTooLong
+        );
+        require!(
+            input_a.as_bytes().len() <= MAX_INPUT_LEN,
+            ErrorCode::InputTooLong
+        );
+        require!(
+            input_b.as_bytes().len() <= MAX_INPUT_LEN,
+            ErrorCode::InputTooLong
+        );
 
         let req = &mut ctx.accounts.request;
         req.authority = ctx.accounts.user.key();
         req.status = 0; // 0 = pending, 1 = fulfilled
         req.nonce = nonce;
 
-        req.prompt = prompt.clone();
+        req.decision = 0; // 0 = unset, 1 = A, 2 = B, 3 = tie
+
+        req.criteria = criteria;
+        req.input_a = input_a;
+        req.input_b = input_b;
 
         req.response_hash = [0u8; 32];
         req.receipt_root = [0u8; 32];
@@ -33,8 +55,9 @@ pub mod ambient_svm_hello {
         Ok(())
     }
 
-    pub fn fulfill_request(
-        ctx: Context<FulfillRequest>,
+    pub fn fulfill_judge_request(
+        ctx: Context<FulfillJudgeRequest>,
+        decision: u8,
         response_hash: [u8; 32],
         receipt_root: [u8; 32],
     ) -> Result<()> {
@@ -46,7 +69,9 @@ pub mod ambient_svm_hello {
 
         let req = &mut ctx.accounts.request;
         require!(req.status == 0, ErrorCode::AlreadyFulfilled);
+        require!(decision >= 1 && decision <= 3, ErrorCode::BadDecision);
 
+        req.decision = decision;
         req.response_hash = response_hash;
         req.receipt_root = receipt_root;
         req.status = 1;
@@ -71,8 +96,8 @@ pub struct InitConfig<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(prompt: String, nonce: u64)]
-pub struct CreateRequest<'info> {
+#[instruction(criteria: String, input_a: String, input_b: String, nonce: u64)]
+pub struct CreateJudgeRequest<'info> {
     #[account(
         seeds = [b"config"],
         bump
@@ -82,11 +107,11 @@ pub struct CreateRequest<'info> {
     #[account(
         init,
         payer = user,
-        space = Request::space(),
+        space = JudgeRequest::space(),
         seeds = [b"req", user.key().as_ref(), &nonce.to_le_bytes()],
         bump
     )]
-    pub request: Account<'info, Request>,
+    pub request: Account<'info, JudgeRequest>,
 
     #[account(mut)]
     pub user: Signer<'info>,
@@ -94,7 +119,7 @@ pub struct CreateRequest<'info> {
 }
 
 #[derive(Accounts)]
-pub struct FulfillRequest<'info> {
+pub struct FulfillJudgeRequest<'info> {
     #[account(
         seeds = [b"config"],
         bump
@@ -102,7 +127,7 @@ pub struct FulfillRequest<'info> {
     pub config: Account<'info, Config>,
 
     #[account(mut)]
-    pub request: Account<'info, Request>,
+    pub request: Account<'info, JudgeRequest>,
 
     pub relayer: Signer<'info>,
 }
@@ -114,35 +139,46 @@ pub struct Config {
 }
 
 #[account]
-pub struct Request {
+pub struct JudgeRequest {
     pub authority: Pubkey,
     pub status: u8,
     pub nonce: u64,
 
+    pub decision: u8,
+
     pub response_hash: [u8; 32],
     pub receipt_root: [u8; 32],
 
-    pub prompt: String,
+    pub criteria: String,
+    pub input_a: String,
+    pub input_b: String,
 }
 
-impl Request {
+impl JudgeRequest {
     pub fn space() -> usize {
         8   // discriminator
         + 32 // authority
         + 1  // status
         + 8  // nonce
+        + 1  // decision
         + 32 // response_hash
         + 32 // receipt_root
-        + 4 + MAX_PROMPT_LEN // String prefix + bytes
+        + 4 + MAX_CRITERIA_LEN // criteria string prefix + bytes
+        + 4 + MAX_INPUT_LEN // input_a string prefix + bytes
+        + 4 + MAX_INPUT_LEN // input_b string prefix + bytes
     }
 }
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Prompt too long")]
-    PromptTooLong,
+    #[msg("Criteria too long")]
+    CriteriaTooLong,
+    #[msg("Input too long")]
+    InputTooLong,
     #[msg("Bad relayer signer")]
     BadRelayer,
     #[msg("Request already fulfilled")]
     AlreadyFulfilled,
+    #[msg("Bad decision value")]
+    BadDecision,
 }

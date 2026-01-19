@@ -1,3 +1,4 @@
+import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import {Program} from "@coral-xyz/anchor";
 import {createHash} from "crypto";
@@ -5,6 +6,62 @@ import {AmbientSvmHello} from "../target/types/ambient_svm_hello";
 
 function sha256Bytes(text: string): number[] {
     return Array.from(createHash("sha256").update(text, "utf8").digest());
+}
+
+function buildJudgePrompt(criteria: string, inputA: string, inputB: string): string {
+    return [
+        "You are a strict judge. Compare Input A vs Input B using the criteria below.",
+        "Return ONLY a JSON object with keys: winner (A, B, or Tie) and reason (short).",
+        "No extra text.",
+        "",
+        `Criteria: ${criteria}`,
+        "",
+        "Input A:",
+        inputA,
+        "",
+        "Input B:",
+        inputB,
+    ].join("\n");
+}
+
+function extractJsonBlock(text: string): string | null {
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const body = fenceMatch ? fenceMatch[1] : text;
+    const start = body.indexOf("{");
+    const end = body.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+        return null;
+    }
+    return body.slice(start, end + 1);
+}
+
+function normalizeWinner(raw: string): number {
+    const v = raw.trim().toLowerCase();
+    if (v === "a" || v === "input a" || v === "option a") return 1;
+    if (v === "b" || v === "input b" || v === "option b") return 2;
+    if (v === "tie" || v === "draw" || v === "equal") return 3;
+    throw new Error(`Unknown winner value: ${raw}`);
+}
+
+function parseDecision(text: string): number {
+    const jsonBlock = extractJsonBlock(text);
+    if (jsonBlock) {
+        try {
+            const parsed = JSON.parse(jsonBlock);
+            if (parsed?.winner) {
+                return normalizeWinner(String(parsed.winner));
+            }
+        } catch {
+            // fall through to regex parsing
+        }
+    }
+
+    const match = text.match(/winner\s*[:=]\s*([A-Za-z]+)/i);
+    if (match?.[1]) {
+        return normalizeWinner(match[1]);
+    }
+
+    throw new Error("Could not parse winner from model response");
 }
 
 async function main() {
@@ -29,10 +86,15 @@ async function main() {
     const requestPda = new anchor.web3.PublicKey(requestPdaStr);
 
 
-    // 1) read on-chain prompt
-    const req = await program.account.request.fetch(requestPda);
-    const prompt: string = req.prompt;
-    console.log("on-chain prompt:", prompt);
+    // 1) read on-chain inputs
+    const req = await program.account.judgeRequest.fetch(requestPda);
+    const criteria: string = req.criteria;
+    const inputA: string = req.inputA;
+    const inputB: string = req.inputB;
+    const prompt = buildJudgePrompt(criteria, inputA, inputB);
+    console.log("criteria:", criteria);
+    console.log("input A:", inputA);
+    console.log("input B:", inputB);
 
     // 2) call Ambient Web2 inference (no stream)
     const res = await fetch("https://api.ambient.xyz/v1/chat/completions", {
@@ -76,12 +138,14 @@ async function main() {
         ? Array.from(Buffer.from(String(merkleRoot).replace(/^0x/, ""), "hex"))
         : new Array(32).fill(0);
 
-    // 3) hash response
+    // 3) parse decision + hash response
+    const decision = parseDecision(responseText);
+    console.log("parsed decision:", decision);
     const responseHash = sha256Bytes(responseText);
 
     // 4) fulfill on-chain
     const sig = await program.methods
-        .fulfillRequest(responseHash as any, receiptRootBytes as any)
+        .fulfillJudgeRequest(decision, responseHash as any, receiptRootBytes as any)
         .accounts({
             request: requestPda,
             relayer: user,
@@ -91,8 +155,9 @@ async function main() {
     console.log("fulfilled tx:", sig);
 
     // 5) verify on-chain state
-    const updated = await program.account.request.fetch(requestPda);
+    const updated = await program.account.judgeRequest.fetch(requestPda);
     console.log("updated status:", updated.status);
+    console.log("stored decision:", updated.decision);
     console.log("stored response_hash (first 8 bytes):", Buffer.from(updated.responseHash).toString("hex").slice(0, 16));
 }
 
