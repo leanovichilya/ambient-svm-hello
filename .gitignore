@@ -1,11 +1,13 @@
 # build
 target/
+test-ledger/
 
 # deps
 node_modules/
 
 # secrets
 .env
+AGENTS.md
 
 # IDE
 .idea/
