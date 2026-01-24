@@ -17,6 +17,7 @@ function buildProposalPrompt(proposalText: string): string {
   return [
     "You are an AI governance assistant. Evaluate the proposal under a \"trust and verification\" mindset.",
     "Return JSON only, with no extra text.",
+    "Do not use markdown or code fences.",
     "",
     "Schema:",
     "{",
