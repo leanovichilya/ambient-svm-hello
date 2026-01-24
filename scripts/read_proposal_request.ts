@@ -24,6 +24,8 @@ async function main() {
   console.log("verdict_code:", req.verdictCode);
   console.log("summary_hash:", Buffer.from(req.summaryHash).toString("hex"));
   console.log("receipt_root:", Buffer.from(req.receiptRoot).toString("hex"));
+  console.log("prompt_hash:", Buffer.from(req.promptHash).toString("hex"));
+  console.log("model_id:", req.modelId);
   console.log("proposal_text:", req.proposalText);
 }
 

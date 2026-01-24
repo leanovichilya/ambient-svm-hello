@@ -4,21 +4,47 @@ import { Program } from "@coral-xyz/anchor";
 import { createHash } from "crypto";
 import { AmbientSvmHello } from "../target/types/ambient_svm_hello";
 
+const MAX_SUMMARY_WORDS = 60;
+const MAX_SUMMARY_CHARS = 400;
+const MAX_LIST_ITEMS = 5;
+const MAX_LIST_ITEM_CHARS = 120;
+
 function sha256Bytes(text: string): number[] {
   return Array.from(createHash("sha256").update(text, "utf8").digest());
 }
 
 function buildProposalPrompt(proposalText: string): string {
   return [
-    "You are a strict governance reviewer.",
-    "Summarize the proposal and return ONLY a JSON object with keys: verdict and summary.",
-    "verdict must be one of: approve, reject, needs_more_info.",
-    "summary must be concise.",
-    "No extra text.",
+    "You are an AI governance assistant. Evaluate the proposal under a \"trust and verification\" mindset.",
+    "Return JSON only, with no extra text.",
+    "",
+    "Schema:",
+    "{",
+    "\"verdict\": \"approve\" | \"reject\" | \"needs_more_info\",",
+    "\"summary\": \"one short paragraph\",",
+    "\"missing_info\": [\"bullet\", \"bullet\", \"bullet\"],",
+    "\"risks\": [\"bullet\", \"bullet\", \"bullet\"]",
+    "}",
+    "",
+    "Rules:",
+    "",
+    "Keep summary under 60 words.",
+    "",
+    "Use \"needs_more_info\" if any key detail is missing (budget cap, scope, owners, timeline, success metric).",
+    "",
+    "Do not invent facts that are not in the proposal.",
+    "",
+    "If the proposal asks for anything unsafe or illegal, verdict must be \"reject\".",
     "",
     "Proposal:",
     proposalText,
   ].join("\n");
+}
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).filter(Boolean).length;
 }
 
 function extractJsonBlock(text: string): string | null {
@@ -40,6 +66,22 @@ function normalizeVerdict(raw: string): number {
   throw new Error(`Unknown verdict value: ${raw}`);
 }
 
+function clampList(list: unknown): string[] {
+  if (!Array.isArray(list)) {
+    throw new Error("missing_info and risks must be arrays");
+  }
+  const cleaned = list.map((item) => {
+    if (typeof item !== "string") {
+      throw new Error("missing_info and risks must contain strings");
+    }
+    const trimmed = item.trim();
+    return trimmed.length > MAX_LIST_ITEM_CHARS
+      ? trimmed.slice(0, MAX_LIST_ITEM_CHARS)
+      : trimmed;
+  });
+  return cleaned.slice(0, MAX_LIST_ITEMS);
+}
+
 function parseResponse(text: string): { verdictCode: number; summary: string } {
   const jsonBlock = extractJsonBlock(text);
   if (!jsonBlock) {
@@ -55,7 +97,16 @@ function parseResponse(text: string): { verdictCode: number; summary: string } {
     throw new Error("Missing verdict or summary in model response");
   }
   const verdictCode = normalizeVerdict(String(parsed.verdict));
-  const summary = String(parsed.summary);
+  const summary = String(parsed.summary).trim();
+  if (!summary) {
+    throw new Error("Summary is empty");
+  }
+  const wordCount = countWords(summary);
+  if (wordCount > MAX_SUMMARY_WORDS || summary.length > MAX_SUMMARY_CHARS) {
+    throw new Error("Summary too long");
+  }
+  clampList(parsed.missing_info);
+  clampList(parsed.risks);
   return { verdictCode, summary };
 }
 
@@ -80,6 +131,11 @@ async function main() {
     console.error("Missing AMBIENT_API_KEY in env");
     process.exit(1);
   }
+  const MODEL_ID = process.env.AMBIENT_MODEL_ID || "ambient-1";
+  if (MODEL_ID.length > 64) {
+    console.error("AMBIENT_MODEL_ID too long");
+    process.exit(1);
+  }
 
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -92,6 +148,7 @@ async function main() {
   const req = await program.account.proposalRequest.fetch(requestPda);
   const proposalText: string = req.proposalText;
   const prompt = buildProposalPrompt(proposalText);
+  const promptHash = sha256Bytes(prompt);
   console.log("proposal_text:", proposalText);
 
   const res = await fetch("https://api.ambient.xyz/v1/chat/completions", {
@@ -101,7 +158,7 @@ async function main() {
       Authorization: `Bearer ${AMBIENT_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "ambient-1",
+      model: MODEL_ID,
       stream: false,
       emit_verified: true,
       wait_for_verification: false,
@@ -136,11 +193,20 @@ async function main() {
   const receiptRootBytes = merkleRoot
     ? merkleRootBytes(merkleRoot)
     : new Array(32).fill(0);
+  if (!merkleRoot) {
+    console.log("receipt missing");
+  }
 
   console.log("verdict code:", verdictCode);
 
   const sig = await program.methods
-    .fulfillProposalRequest(verdictCode, summaryHash as any, receiptRootBytes as any)
+    .fulfillProposalRequest(
+      verdictCode,
+      summaryHash as any,
+      receiptRootBytes as any,
+      promptHash as any,
+      MODEL_ID
+    )
     .accounts({
       request: requestPda,
       relayer: user,

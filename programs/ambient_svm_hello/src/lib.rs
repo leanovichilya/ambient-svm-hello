@@ -6,6 +6,7 @@ declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
 const MAX_CRITERIA_LEN: usize = 512;
 const MAX_INPUT_LEN: usize = 512;
 const MAX_PROPOSAL_TEXT_LEN: usize = 512;
+const MAX_MODEL_ID_LEN: usize = 64;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -101,6 +102,8 @@ pub mod ambient_svm_hello {
 
         req.summary_hash = [0u8; 32];
         req.receipt_root = [0u8; 32];
+        req.prompt_hash = [0u8; 32];
+        req.model_id = String::new();
 
         Ok(())
     }
@@ -110,6 +113,8 @@ pub mod ambient_svm_hello {
         verdict_code: u8,
         summary_hash: [u8; 32],
         receipt_root: [u8; 32],
+        prompt_hash: [u8; 32],
+        model_id: String,
     ) -> Result<()> {
         require_keys_eq!(
             ctx.accounts.config.relayer,
@@ -120,10 +125,16 @@ pub mod ambient_svm_hello {
         let req = &mut ctx.accounts.request;
         require!(req.status == 0, ErrorCode::AlreadyFulfilled);
         require!(verdict_code >= 1 && verdict_code <= 3, ErrorCode::BadVerdict);
+        require!(
+            model_id.as_bytes().len() <= MAX_MODEL_ID_LEN,
+            ErrorCode::ModelIdTooLong
+        );
 
         req.verdict_code = verdict_code;
         req.summary_hash = summary_hash;
         req.receipt_root = receipt_root;
+        req.prompt_hash = prompt_hash;
+        req.model_id = model_id;
         req.status = 1;
 
         Ok(())
@@ -266,6 +277,8 @@ pub struct ProposalRequest {
 
     pub summary_hash: [u8; 32],
     pub receipt_root: [u8; 32],
+    pub prompt_hash: [u8; 32],
+    pub model_id: String,
 
     pub proposal_text: String,
 }
@@ -279,6 +292,8 @@ impl ProposalRequest {
         + 1
         + 32
         + 32
+        + 32
+        + 4 + MAX_MODEL_ID_LEN
         + 4 + MAX_PROPOSAL_TEXT_LEN
     }
 }
@@ -299,4 +314,6 @@ pub enum ErrorCode {
     BadDecision,
     #[msg("Bad verdict code")]
     BadVerdict,
+    #[msg("Model id too long")]
+    ModelIdTooLong,
 }

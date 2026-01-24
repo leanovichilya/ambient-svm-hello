@@ -10,6 +10,11 @@ Goal: minimal on-chain proposal flow that
 2) Ambient summarizes + returns a verdict (off-chain)
 3) stores the verdict and summary hash on-chain
 
+On-chain fields for ProposalRequest
+- prompt_hash: sha256 of the exact prompt the relayer sends to the model
+- model_id: model name from relayer config
+- receipt_root: merkle_root from verified inference receipt when available, otherwise zeros
+
 Verdict codes
 - 0 = unset
 - 1 = approve
@@ -46,10 +51,13 @@ yarn ts-node scripts/read_proposal_request.ts <PROPOSAL_REQUEST_PDA>
 ```
 
 Example run (devnet)
-- Proposal Request PDA: JAPocCSRDnuBk7MVsqXEHTmuAGkrPhHfdb728MDYqrX3 (Explorer: https://explorer.solana.com/address/JAPocCSRDnuBk7MVsqXEHTmuAGkrPhHfdb728MDYqrX3?cluster=devnet)
-- Fulfill tx: 5Mm2HKj47UspmYEszLFZZdCobt4Xz8bujCzepUFAs17xYNfqBcJSvKhVBxjJXRP7cEEhAG3jpDuAsM67rsD1EKTR (Explorer: https://explorer.solana.com/tx/5Mm2HKj47UspmYEszLFZZdCobt4Xz8bujCzepUFAs17xYNfqBcJSvKhVBxjJXRP7cEEhAG3jpDuAsM67rsD1EKTR?cluster=devnet)
+- Proposal Request PDA: MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw (Explorer: https://explorer.solana.com/address/MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw?cluster=devnet)
+- Fulfill tx: 3GpoMprk6boCeWfv9AYCZDjEsKJjXeHJTdGrKCacbQ5pYo4CEkd4ArbqscLiQbnGQqvNKsuhX4hu9oPkaBi5FJVz (Explorer: https://explorer.solana.com/tx/3GpoMprk6boCeWfv9AYCZDjEsKJjXeHJTdGrKCacbQ5pYo4CEkd4ArbqscLiQbnGQqvNKsuhX4hu9oPkaBi5FJVz?cluster=devnet)
 - Verdict: 3 (needs_more_info)
-- Summary hash (sha256): 0x0fbafd3dff3250b4f8c5d1f3074b8ed623b5b8a5e9308bfccf2c042e1b2d1a15
+- Summary hash (sha256): 0xf4ec52dc6e64929d4049017feabf24946a9f87c09b40622104e625100f0a49d8
+- Prompt hash (sha256): 0x74db00db1ad022ff02a92eea9d6d7401bd8611642e61bb1b38371013f7127fff
+- Model id: zai-org/GLM-4.6
+- Receipt root: 0xf9f525cd5ff30496af18c0a27100d23db4b48e3cc74ced197ad02ca8c2a5b3d9
 
 ### Week 2 is live: Stress the Edges
 
