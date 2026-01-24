@@ -1,4 +1,57 @@
-# Ambient Web3 Experiment #2 - LLM as Judge (SVM)
+# Ambient Web3 Experiment #3 - AI-driven governance (SVM)
+
+## Weeks
+current = Week 3
+
+### Week 3 Web3 Experiment 3: AI-driven governance (AI proposal summarizer)
+
+Goal: minimal on-chain proposal flow that
+1) submits a proposal text on-chain
+2) Ambient summarizes + returns a verdict (off-chain)
+3) stores the verdict and summary hash on-chain
+
+Verdict codes
+- 0 = unset
+- 1 = approve
+- 2 = reject
+- 3 = needs_more_info
+
+Env vars
+Copy `.env.example` to `.env` and fill in secrets.
+
+```bash
+cp .env.example .env
+```
+
+How to run (Week 3)
+1) Build
+```bash
+anchor build
+```
+
+2) Create a proposal request
+The test file creates a request on the configured cluster:
+```bash
+anchor test --skip-deploy
+```
+
+3) Fulfill as relayer
+```bash
+yarn ts-node scripts/relayer_proposal_fulfill.ts <PROPOSAL_REQUEST_PDA>
+```
+
+4) Read proposal request (inspect on-chain state)
+```bash
+yarn ts-node scripts/read_proposal_request.ts <PROPOSAL_REQUEST_PDA>
+```
+
+Example run (devnet)
+- Proposal Request PDA: JAPocCSRDnuBk7MVsqXEHTmuAGkrPhHfdb728MDYqrX3 (Explorer: https://explorer.solana.com/address/JAPocCSRDnuBk7MVsqXEHTmuAGkrPhHfdb728MDYqrX3?cluster=devnet)
+- Fulfill tx: 5Mm2HKj47UspmYEszLFZZdCobt4Xz8bujCzepUFAs17xYNfqBcJSvKhVBxjJXRP7cEEhAG3jpDuAsM67rsD1EKTR (Explorer: https://explorer.solana.com/tx/5Mm2HKj47UspmYEszLFZZdCobt4Xz8bujCzepUFAs17xYNfqBcJSvKhVBxjJXRP7cEEhAG3jpDuAsM67rsD1EKTR?cluster=devnet)
+- Verdict: 3 (needs_more_info)
+- Summary hash (sha256): 0x0fbafd3dff3250b4f8c5d1f3074b8ed623b5b8a5e9308bfccf2c042e1b2d1a15
+
+### Week 2 is live: Stress the Edges
 
 Goal: minimal on-chain "judge" flow that
 1) submits two inputs + criteria on-chain
