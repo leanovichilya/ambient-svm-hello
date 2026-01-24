@@ -1,17 +1,13 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { createHash } from "crypto";
-import { AmbientSvmHello } from "../target/types/ambient_svm_hello";
+import { callAmbient } from "./ambient";
+import { getProgram } from "./anchor";
+import { getArgOrExit, parseJsonBlock, sha256Bytes } from "./utils";
 
 const MAX_SUMMARY_WORDS = 60;
 const MAX_SUMMARY_CHARS = 400;
 const MAX_LIST_ITEMS = 5;
 const MAX_LIST_ITEM_CHARS = 120;
-
-function sha256Bytes(text: string): number[] {
-  return Array.from(createHash("sha256").update(text, "utf8").digest());
-}
 
 function buildProposalPrompt(proposalText: string): string {
   return [
@@ -48,17 +44,6 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).filter(Boolean).length;
 }
 
-function extractJsonBlock(text: string): string | null {
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fenceMatch ? fenceMatch[1] : text;
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    return null;
-  }
-  return body.slice(start, end + 1);
-}
-
 function normalizeVerdict(raw: string): number {
   const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (v === "approve") return 1;
@@ -84,16 +69,7 @@ function clampList(list: unknown): string[] {
 }
 
 function parseResponse(text: string): { verdictCode: number; summary: string } {
-  const jsonBlock = extractJsonBlock(text);
-  if (!jsonBlock) {
-    throw new Error("Could not find JSON in model response");
-  }
-  let parsed: any;
-  try {
-    parsed = JSON.parse(jsonBlock);
-  } catch {
-    throw new Error("Could not parse JSON from model response");
-  }
+  const parsed: any = parseJsonBlock(text);
   if (!parsed?.verdict || !parsed?.summary) {
     throw new Error("Missing verdict or summary in model response");
   }
@@ -111,21 +87,10 @@ function parseResponse(text: string): { verdictCode: number; summary: string } {
   return { verdictCode, summary };
 }
 
-function merkleRootBytes(merkleRoot: string): number[] {
-  const hex = String(merkleRoot).replace(/^0x/, "");
-  if (hex.length > 64) {
-    throw new Error("merkle_root hex too long");
-  }
-  const padded = hex.padStart(64, "0");
-  return Array.from(Buffer.from(padded, "hex"));
-}
-
 async function main() {
-  const requestPdaStr = process.argv[2];
-  if (!requestPdaStr) {
-    console.error("Usage: yarn ts-node scripts/relayer_proposal_fulfill.ts <PROPOSAL_REQUEST_PDA>");
-    process.exit(1);
-  }
+  const requestPdaStr = getArgOrExit(
+    "Usage: yarn ts-node scripts/relayer_proposal_fulfill.ts <PROPOSAL_REQUEST_PDA>"
+  );
 
   const AMBIENT_API_KEY = process.env.AMBIENT_API_KEY;
   if (!AMBIENT_API_KEY) {
@@ -138,10 +103,7 @@ async function main() {
     process.exit(1);
   }
 
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.AmbientSvmHello as Program<AmbientSvmHello>;
+  const { provider, program } = getProgram();
 
   const user = provider.wallet.publicKey;
   const requestPda = new anchor.web3.PublicKey(requestPdaStr);
@@ -156,32 +118,11 @@ async function main() {
   const promptHash = sha256Bytes(prompt);
   console.log("proposal_text:", proposalText);
 
-  const res = await fetch("https://api.ambient.xyz/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${AMBIENT_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL_ID,
-      stream: false,
-      emit_verified: true,
-      wait_for_verification: false,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Ambient API error ${res.status}: ${t}`);
-  }
-
-  const data: any = await res.json();
-
-  const responseText =
-    data?.choices?.[0]?.message?.content ??
-    data?.choices?.[0]?.delta?.content ??
-    "";
+  const { data, responseText, receiptRootBytes, receiptPresent } = await callAmbient(
+    prompt,
+    MODEL_ID,
+    AMBIENT_API_KEY
+  );
 
   if (!responseText) {
     console.error("Could not parse response text. Full response keys:", Object.keys(data));
@@ -194,11 +135,7 @@ async function main() {
   const { verdictCode, summary } = parseResponse(responseText);
   const summaryHash = sha256Bytes(summary);
 
-  const merkleRoot = data?.receipt?.merkle_root ?? data?.merkle_root ?? null;
-  const receiptRootBytes = merkleRoot
-    ? merkleRootBytes(merkleRoot)
-    : new Array(32).fill(0);
-  if (!merkleRoot) {
+  if (!receiptPresent) {
     console.log("receipt missing");
   }
 

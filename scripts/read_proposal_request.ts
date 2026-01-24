@@ -1,19 +1,14 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { AmbientSvmHello } from "../target/types/ambient_svm_hello";
+import { getProgram } from "./anchor";
+import { getArgOrExit } from "./utils";
 
 async function main() {
-  const requestPdaStr = process.argv[2];
-  if (!requestPdaStr) {
-    console.error("Usage: yarn ts-node scripts/read_proposal_request.ts <PROPOSAL_REQUEST_PDA>");
-    process.exit(1);
-  }
+  const requestPdaStr = getArgOrExit(
+    "Usage: yarn ts-node scripts/read_proposal_request.ts <PROPOSAL_REQUEST_PDA>"
+  );
 
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.AmbientSvmHello as Program<AmbientSvmHello>;
+  const { program } = getProgram();
 
   const requestPda = new anchor.web3.PublicKey(requestPdaStr);
   const req = await program.account.proposalRequest.fetch(requestPda);
