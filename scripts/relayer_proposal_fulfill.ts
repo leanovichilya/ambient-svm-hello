@@ -148,6 +148,10 @@ async function main() {
 
   const req = await program.account.proposalRequest.fetch(requestPda);
   const proposalText: string = req.proposalText;
+  if (req.status !== 0) {
+    console.error(`Request already fulfilled. status=${req.status}`);
+    process.exit(1);
+  }
   const prompt = buildProposalPrompt(proposalText);
   const promptHash = sha256Bytes(prompt);
   console.log("proposal_text:", proposalText);
