@@ -32,6 +32,21 @@ Canonical proposal text
 - body_truncated is true when the body is shortened to fit transaction size limits
 - The create script trims the canonical text to stay within transaction limits (currently ~800 bytes)
 
+AI role (proposal summarizer)
+- Off-chain relayer builds a deterministic prompt and calls Ambient to produce a strict JSON verdict + summary
+- On-chain stores verdict_code, summary_hash, prompt_hash, model_id, and receipt_root (when provided)
+
+Trust artifacts
+- prompt_hash: sha256 of the exact prompt used
+- model_id: which model produced the output
+- receipt_root: merkle_root from verified inference receipts (if available)
+
+Limitations and failure cases
+- Off-chain relayer is trusted and can lie about the decision
+- Proposal bodies may be truncated due to transaction size limits
+- If Ambient returns invalid JSON, fulfillment fails and the request stays pending
+- If Ambient returns 429/500, relayer exits and request remains pending
+
 Verdict codes
 - 0 = unset
 - 1 = approve
