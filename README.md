@@ -14,6 +14,15 @@ On-chain fields for ProposalRequest
 - prompt_hash: sha256 of the exact prompt the relayer sends to the model
 - model_id: model name from relayer config
 - receipt_root: merkle_root from verified inference receipt when available, otherwise zeros
+- source: governance platform (snapshot or tally)
+- proposal_id: proposal identifier from the source
+- proposal_text: canonical proposal text (may be truncated)
+
+Canonical proposal text
+- Deterministic field order: source, proposal_id, space, title, author, start_unix, end_unix, choices, body_sha256, body_truncated, body
+- body_sha256 always hashes the full body fetched from the source
+- body_truncated is true when the body is shortened to fit transaction size limits
+- The create script trims the canonical text to stay within transaction limits (currently ~800 bytes)
 
 Verdict codes
 - 0 = unset
@@ -22,7 +31,7 @@ Verdict codes
 - 3 = needs_more_info
 
 Env vars
-Copy `.env.example` to `.env` and fill in secrets.
+Copy `.env.example` to `.env` and fill in secrets. AMBIENT_API_KEY is required. TALLY_API_KEY is required only for Tally proposals.
 
 ```bash
 cp .env.example .env
@@ -34,8 +43,23 @@ How to run (Week 3)
 anchor build
 ```
 
+Optional: deploy (devnet) if the program changed
+```bash
+anchor deploy --no-idl
+```
+If you need to refresh the on-chain IDL:
+```bash
+anchor idl close F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu
+anchor idl init -f target/idl/ambient_svm_hello.json F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu
+```
+
 2) Create a proposal request
-The test file creates a request on the configured cluster:
+Create a request from a governance proposal URL (Snapshot or Tally):
+```bash
+yarn ts-node scripts/create_proposal_from_url.ts <PROPOSAL_URL>
+```
+
+You can also create one from the test file on the configured cluster:
 ```bash
 anchor test --skip-deploy
 ```

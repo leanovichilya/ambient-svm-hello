@@ -10,6 +10,16 @@ export function merkleRootBytes(merkleRoot: string): number[] {
   return Array.from(Buffer.from(padded, "hex"));
 }
 
+export class AmbientApiError extends Error {
+  status: number;
+  body: string;
+  constructor(status: number, body: string) {
+    super(`Ambient API error ${status}: ${body}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function callAmbient(
   prompt: string,
   modelId: string,
@@ -37,7 +47,7 @@ export async function callAmbient(
 
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`Ambient API error ${res.status}: ${t}`);
+    throw new AmbientApiError(res.status, t);
   }
 
   const data: any = await res.json();

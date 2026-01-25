@@ -1,7 +1,12 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { callAmbient } from "./ambient";
+import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
+import {
+  fetchVotesSummary,
+  GovernanceSource,
+  VotesSummary,
+} from "./governance_sources";
 import { getArgOrExit, parseJsonBlock, sha256Bytes } from "./utils";
 
 const MAX_SUMMARY_WORDS = 60;
@@ -9,7 +14,11 @@ const MAX_SUMMARY_CHARS = 400;
 const MAX_LIST_ITEMS = 5;
 const MAX_LIST_ITEM_CHARS = 120;
 
-function buildProposalPrompt(proposalText: string): string {
+function buildProposalPrompt(
+  proposalText: string,
+  votesSummary: VotesSummary | null
+): string {
+  const votesLine = votesSummary ? JSON.stringify(votesSummary) : "unavailable";
   return [
     "You are an AI governance assistant. Evaluate the proposal under a \"trust and verification\" mindset.",
     "Return JSON only, with no extra text.",
@@ -27,11 +36,15 @@ function buildProposalPrompt(proposalText: string): string {
     "",
     "Keep summary under 60 words.",
     "",
-    "Use \"needs_more_info\" if any key detail is missing (budget cap, scope, owners, timeline, success metric).",
+    "Be conservative. Use \"needs_more_info\" if any key detail is missing (budget cap, scope, owners, timeline, success metric) or if the data is sparse.",
+    "If vote summary is unavailable or indicates low participation, prefer \"needs_more_info\".",
     "",
     "Do not invent facts that are not in the proposal.",
     "",
     "If the proposal asks for anything unsafe or illegal, verdict must be \"reject\".",
+    "",
+    "Vote summary (if available):",
+    votesLine,
     "",
     "Proposal:",
     proposalText,
@@ -114,15 +127,30 @@ async function main() {
     console.error(`Request already fulfilled. status=${req.status}`);
     process.exit(1);
   }
-  const prompt = buildProposalPrompt(proposalText);
-  const promptHash = sha256Bytes(prompt);
-  console.log("proposal_text:", proposalText);
+  let votesSummary: VotesSummary | null = null;
+  const source = String(req.source || "") as GovernanceSource;
+  const proposalId = String(req.proposalId || "");
+  if (source && proposalId) {
+    try {
+      votesSummary = await fetchVotesSummary(source, proposalId);
+    } catch {}
+  }
 
-  const { data, responseText, receiptRootBytes, receiptPresent } = await callAmbient(
-    prompt,
-    MODEL_ID,
-    AMBIENT_API_KEY
-  );
+  const prompt = buildProposalPrompt(proposalText, votesSummary);
+  const promptHash = sha256Bytes(prompt);
+
+  let ambientResult;
+  try {
+    ambientResult = await callAmbient(prompt, MODEL_ID, AMBIENT_API_KEY);
+  } catch (e) {
+    if (e instanceof AmbientApiError && (e.status === 429 || e.status === 500)) {
+      console.error(`Ambient API ${e.status}`);
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  const { data, responseText, receiptRootBytes, receiptPresent } = ambientResult;
 
   if (!responseText) {
     console.error("Could not parse response text. Full response keys:", Object.keys(data));
@@ -130,6 +158,7 @@ async function main() {
     process.exit(1);
   }
 
+  console.log("proposal_text:", proposalText);
   console.log("model response:", responseText);
 
   const { verdictCode, summary } = parseResponse(responseText);

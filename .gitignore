@@ -8,6 +8,9 @@ node_modules/
 # secrets
 .env
 AGENTS.md
+**/id_*.json
+**/*keypair*.json
+*.keypair
 
 # IDE
 .idea/

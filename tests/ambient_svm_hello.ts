@@ -22,9 +22,7 @@ describe("ambient_svm_hello (devnet)", () => {
       await program.methods
         .initConfig(user)
         .accounts({
-          config: configPda,
           admin: user,
-          systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();
       console.log("config inited:", configPda.toBase58());
@@ -62,10 +60,7 @@ Add .env.example with placeholder value and README instructions to copy it to .e
     await program.methods
       .createJudgeRequest(criteria, inputA, inputB, nonce)
       .accounts({
-        config: configPda,
-        request: requestPda,
         user,
-        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc();
 
@@ -99,6 +94,8 @@ Add .env.example with placeholder value and README instructions to copy it to .e
       console.log("config inited:", configPda.toBase58());
     }
 
+    const source = "manual";
+    const proposalId = "local";
     const proposalText =
       "Proposal: Allocate 5% of the treasury to fund quarterly security audits and publish a public report.";
     const nonce = new anchor.BN(Date.now());
@@ -113,12 +110,9 @@ Add .env.example with placeholder value and README instructions to copy it to .e
     );
 
     await program.methods
-      .createProposalRequest(proposalText, nonce)
+      .createProposalRequest(source, proposalId, proposalText, nonce)
       .accounts({
-        config: configPda,
-        request: requestPda,
         user,
-        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc();
 

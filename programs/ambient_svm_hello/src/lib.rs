@@ -5,8 +5,10 @@ declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
 
 const MAX_CRITERIA_LEN: usize = 512;
 const MAX_INPUT_LEN: usize = 512;
-const MAX_PROPOSAL_TEXT_LEN: usize = 512;
+const MAX_PROPOSAL_TEXT_LEN: usize = 4096;
 const MAX_MODEL_ID_LEN: usize = 64;
+const MAX_SOURCE_LEN: usize = 16;
+const MAX_PROPOSAL_ID_LEN: usize = 128;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -83,9 +85,19 @@ pub mod ambient_svm_hello {
 
     pub fn create_proposal_request(
         ctx: Context<CreateProposalRequest>,
+        source: String,
+        proposal_id: String,
         proposal_text: String,
         nonce: u64,
     ) -> Result<()> {
+        require!(
+            source.as_bytes().len() <= MAX_SOURCE_LEN,
+            ErrorCode::SourceTooLong
+        );
+        require!(
+            proposal_id.as_bytes().len() <= MAX_PROPOSAL_ID_LEN,
+            ErrorCode::ProposalIdTooLong
+        );
         require!(
             proposal_text.as_bytes().len() <= MAX_PROPOSAL_TEXT_LEN,
             ErrorCode::ProposalTooLong
@@ -98,6 +110,8 @@ pub mod ambient_svm_hello {
 
         req.verdict_code = 0;
 
+        req.source = source;
+        req.proposal_id = proposal_id;
         req.proposal_text = proposal_text;
 
         req.summary_hash = [0u8; 32];
@@ -194,7 +208,7 @@ pub struct FulfillJudgeRequest<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(proposal_text: String, nonce: u64)]
+#[instruction(source: String, proposal_id: String, proposal_text: String, nonce: u64)]
 pub struct CreateProposalRequest<'info> {
     #[account(
         seeds = [b"config"],
@@ -280,6 +294,8 @@ pub struct ProposalRequest {
     pub prompt_hash: [u8; 32],
     pub model_id: String,
 
+    pub source: String,
+    pub proposal_id: String,
     pub proposal_text: String,
 }
 
@@ -294,6 +310,8 @@ impl ProposalRequest {
         + 32
         + 32
         + 4 + MAX_MODEL_ID_LEN
+        + 4 + MAX_SOURCE_LEN
+        + 4 + MAX_PROPOSAL_ID_LEN
         + 4 + MAX_PROPOSAL_TEXT_LEN
     }
 }
@@ -316,4 +334,8 @@ pub enum ErrorCode {
     BadVerdict,
     #[msg("Model id too long")]
     ModelIdTooLong,
+    #[msg("Source too long")]
+    SourceTooLong,
+    #[msg("Proposal id too long")]
+    ProposalIdTooLong,
 }
