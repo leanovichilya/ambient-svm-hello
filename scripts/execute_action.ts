@@ -1,6 +1,7 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
+import { getActionPda } from "./governance";
 import { getArgOrExit } from "./utils";
 
 async function main() {
@@ -12,14 +13,7 @@ async function main() {
   const proposalPda = new anchor.web3.PublicKey(proposalPdaStr);
   const proposal = await program.account.proposal.fetch(proposalPda);
 
-  const [actionPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("action"), proposalPda.toBuffer()],
-    program.programId
-  );
-  const [vaultPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury_vault")],
-    program.programId
-  );
+  const actionPda = getActionPda(program.programId, proposalPda);
   const action = await program.account.actionRequest.fetch(actionPda);
 
   if (action.status !== 0) {

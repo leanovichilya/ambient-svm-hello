@@ -1,6 +1,7 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
+import { ensureTreasury, getActionPda, getProposalPda } from "./governance";
 
 const TREASURY_LAMPORTS = 2_000_000;
 const ACTION_LAMPORTS = 1_000_000;
@@ -21,41 +22,11 @@ async function fundWallet(
   await provider.sendAndConfirm(tx, []);
 }
 
-async function ensureTreasury(program: anchor.Program, provider: anchor.AnchorProvider) {
-  const [treasuryPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury")],
-    program.programId
-  );
-  const [vaultPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury_vault")],
-    program.programId
-  );
-  const info = await provider.connection.getAccountInfo(treasuryPda);
-  if (!info) {
-    await program.methods
-      .initTreasury()
-      .accounts({
-        payer: provider.wallet.publicKey,
-      })
-      .rpc();
-  }
-  const vaultInfo = await provider.connection.getAccountInfo(vaultPda);
-  if (!vaultInfo) {
-    await program.methods
-      .initTreasuryVault()
-      .accounts({
-        payer: provider.wallet.publicKey,
-      })
-      .rpc();
-  }
-  return treasuryPda;
-}
-
 async function main() {
   const { provider, program } = getProgram();
   const user = provider.wallet.publicKey;
 
-  await ensureTreasury(program as any, provider);
+  await ensureTreasury(program as any, provider, 0, 0);
   await program.methods
     .fundTreasury(new anchor.BN(TREASURY_LAMPORTS))
     .accounts({
@@ -66,10 +37,7 @@ async function main() {
   const proposalText =
     "Minimal proposal: fund an automation action after approval.";
   const nonce = new anchor.BN(Date.now());
-  const [proposalPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("proposal_v2"), user.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
+  const proposalPda = getProposalPda(program.programId, user, nonce);
 
   await program.methods
     .createGovernanceProposal(proposalText, new anchor.BN(0), nonce)
@@ -152,10 +120,7 @@ async function main() {
     .rpc();
 
   const proposal = await program.account.proposal.fetch(proposalPda);
-  const [actionPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("action"), proposalPda.toBuffer()],
-    program.programId
-  );
+  const actionPda = getActionPda(program.programId, proposalPda);
   const action = await program.account.actionRequest.fetch(actionPda);
 
   console.log("proposal:", proposalPda.toBase58());

@@ -7,7 +7,7 @@ import {
   GovernanceSource,
   VotesSummary,
 } from "./governance_sources";
-import { getArgOrExit, parseJsonBlock, sha256Bytes } from "./utils";
+import { getArgOrExit, normalizeVerdict, parseJsonBlock, sha256Bytes } from "./utils";
 
 const MAX_SUMMARY_WORDS = 60;
 const MAX_SUMMARY_CHARS = 400;
@@ -55,14 +55,6 @@ function countWords(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
   return trimmed.split(/\s+/).filter(Boolean).length;
-}
-
-function normalizeVerdict(raw: string): number {
-  const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (v === "approve") return 1;
-  if (v === "reject") return 2;
-  if (v === "needs_more_info") return 3;
-  throw new Error(`Unknown verdict value: ${raw}`);
 }
 
 function clampList(list: unknown): string[] {

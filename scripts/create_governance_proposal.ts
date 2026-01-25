@@ -1,6 +1,7 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
+import { getProposalPda } from "./governance";
 
 async function main() {
   const { provider, program } = getProgram();
@@ -9,10 +10,7 @@ async function main() {
   const proposalText =
     "Minimal proposal: fund an automation action after approval.";
   const nonce = new anchor.BN(Date.now());
-  const [proposalPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("proposal_v2"), user.toBuffer(), nonce.toArrayLike(Buffer, "le", 8)],
-    program.programId
-  );
+  const proposalPda = getProposalPda(program.programId, user, nonce);
 
   await program.methods
     .createGovernanceProposal(proposalText, new anchor.BN(0), nonce)

@@ -2,7 +2,8 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { getArgOrExit, parseJsonBlock } from "./utils";
+import { ensureTreasury } from "./governance";
+import { getArgOrExit, normalizeVerdict, parseJsonBlock } from "./utils";
 
 const TREASURY_TOPUP = 2_000_000;
 const ACTION_LAMPORTS = 1_000_000;
@@ -32,60 +33,12 @@ function buildJudgePrompt(
   ].join("\n");
 }
 
-function normalizeVerdict(raw: string): number {
-  const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (v === "approve") return 1;
-  if (v === "reject") return 2;
-  if (v === "needs_more_info") return 3;
-  throw new Error(`Unknown verdict value: ${raw}`);
-}
-
 function parseResponse(text: string): number {
   const parsed: any = parseJsonBlock(text);
   if (!parsed?.verdict) {
     throw new Error("Missing verdict in model response");
   }
   return normalizeVerdict(String(parsed.verdict));
-}
-
-async function ensureTreasury(program: anchor.Program, provider: anchor.AnchorProvider) {
-  const [treasuryPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury")],
-    program.programId
-  );
-  const [vaultPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury_vault")],
-    program.programId
-  );
-  const treasuryInfo = await provider.connection.getAccountInfo(treasuryPda);
-  if (!treasuryInfo) {
-    await program.methods
-      .initTreasury()
-      .accounts({
-        payer: provider.wallet.publicKey,
-      })
-      .rpc();
-  }
-  const vaultInfo = await provider.connection.getAccountInfo(vaultPda);
-  if (!vaultInfo) {
-    await program.methods
-      .initTreasuryVault()
-      .accounts({
-        treasuryVault: vaultPda,
-        payer: provider.wallet.publicKey,
-      })
-      .rpc();
-  }
-  const vaultBalance = (await provider.connection.getAccountInfo(vaultPda))?.lamports ?? 0;
-  if (vaultBalance < ACTION_LAMPORTS) {
-    await program.methods
-      .fundTreasury(new anchor.BN(TREASURY_TOPUP))
-      .accounts({
-        treasuryVault: vaultPda,
-        funder: provider.wallet.publicKey,
-      })
-      .rpc();
-  }
 }
 
 async function main() {
@@ -121,7 +74,7 @@ async function main() {
   };
   const prompt = buildJudgePrompt(String(proposal.proposalText || ""), votes);
 
-  await ensureTreasury(program as any, provider);
+  await ensureTreasury(program as any, provider, ACTION_LAMPORTS, TREASURY_TOPUP);
 
   const judges = [
     anchor.web3.Keypair.generate(),

@@ -35,3 +35,11 @@ export function getArgOrExit(usage: string): string {
   }
   return arg;
 }
+
+export function normalizeVerdict(raw: string): number {
+  const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (v === "approve") return 1;
+  if (v === "reject") return 2;
+  if (v === "needs_more_info") return 3;
+  throw new Error(`Unknown verdict value: ${raw}`);
+}
