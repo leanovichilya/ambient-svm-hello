@@ -2,11 +2,11 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
 import { getActionPda } from "./governance";
-import { getArgOrExit } from "./utils";
+import { getArgOrExit, usage } from "./utils";
 
 async function main() {
   const proposalPdaStr = getArgOrExit(
-    "Usage: yarn ts-node scripts/execute_action.ts <PROPOSAL_PDA>"
+    usage("execute_action.ts", "<PROPOSAL_PDA>")
   );
 
   const { provider, program } = getProgram();

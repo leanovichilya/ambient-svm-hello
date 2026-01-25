@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { DEFAULT_MODEL_ID, MAX_MODEL_ID_LEN } from "./constants";
 
 export function sha256Bytes(text: string): number[] {
   return Array.from(createHash("sha256").update(text, "utf8").digest());
@@ -42,4 +43,37 @@ export function normalizeVerdict(raw: string): number {
   if (v === "reject") return 2;
   if (v === "needs_more_info") return 3;
   throw new Error(`Unknown verdict value: ${raw}`);
+}
+
+export function usage(script: string, args: string): string {
+  return `Usage: yarn ts-node scripts/${script} ${args}`;
+}
+
+export function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    console.error(`Missing ${name} in env`);
+    process.exit(1);
+  }
+  return value;
+}
+
+export function getModelIdOrExit(): string {
+  const modelId = process.env.AMBIENT_MODEL_ID || DEFAULT_MODEL_ID;
+  if (modelId.length > MAX_MODEL_ID_LEN) {
+    console.error("AMBIENT_MODEL_ID too long");
+    process.exit(1);
+  }
+  return modelId;
+}
+
+export function logReceipt(
+  label: string,
+  receiptPresent: boolean,
+  receiptRootBytes: number[]
+): void {
+  console.log(`${label}_receipt_present:`, receiptPresent);
+  if (receiptPresent) {
+    console.log(`${label}_receipt_root:`, Buffer.from(receiptRootBytes).toString("hex"));
+  }
 }

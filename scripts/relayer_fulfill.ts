@@ -2,7 +2,14 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { extractJsonBlock, getArgOrExit, sha256Bytes } from "./utils";
+import {
+    extractJsonBlock,
+    getArgOrExit,
+    getModelIdOrExit,
+    requireEnv,
+    sha256Bytes,
+    usage,
+} from "./utils";
 
 function buildJudgePrompt(criteria: string, inputA: string, inputB: string): string {
     return [
@@ -49,13 +56,10 @@ function parseDecision(text: string): number {
 }
 
 async function main() {
-    const requestPdaStr = getArgOrExit("Usage: yarn ts-node scripts/relayer_fulfill.ts <REQUEST_PDA>");
+    const requestPdaStr = getArgOrExit(usage("relayer_fulfill.ts", "<REQUEST_PDA>"));
 
-    const AMBIENT_API_KEY = process.env.AMBIENT_API_KEY;
-    if (!AMBIENT_API_KEY) {
-        console.error("Missing AMBIENT_API_KEY in env");
-        process.exit(1);
-    }
+    const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
+    const MODEL_ID = getModelIdOrExit();
 
     const { provider, program } = getProgram();
 
@@ -73,7 +77,7 @@ async function main() {
     console.log("input B:", inputB);
     const { data, responseText, receiptRootBytes } = await callAmbient(
         prompt,
-        "ambient-1",
+        MODEL_ID,
         AMBIENT_API_KEY
     );
 

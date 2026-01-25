@@ -2,20 +2,25 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { ensureTreasury } from "./governance";
+import {
+  createProposalWithRevisionAndVote,
+  ensureTreasury,
+  fetchGovernanceState,
+} from "./governance";
 import { buildJudgePrompt } from "./prompts";
 import {
-  getArgOrExit,
+  ACTION_LAMPORTS,
+  TREASURY_TOPUP_LAMPORTS,
+} from "./constants";
+import {
   getModelIdOrExit,
   logReceipt,
   normalizeVerdict,
   parseJsonBlock,
   requireEnv,
-  usage,
 } from "./utils";
-import { ACTION_LAMPORTS, TREASURY_TOPUP_LAMPORTS } from "./constants";
 
-function parseResponse(text: string): number {
+function parseVerdict(text: string): number {
   const parsed: any = parseJsonBlock(text);
   if (!parsed?.verdict) {
     throw new Error("Missing verdict in model response");
@@ -24,29 +29,11 @@ function parseResponse(text: string): number {
 }
 
 async function main() {
-  const proposalPdaStr = getArgOrExit(
-    usage("ai_judge_consensus.ts", "<PROPOSAL_PDA>")
-  );
-
   const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
   const MODEL_ID = getModelIdOrExit();
 
   const { provider, program } = getProgram();
   const user = provider.wallet.publicKey;
-  const proposalPda = new anchor.web3.PublicKey(proposalPdaStr);
-  const proposal = await program.account.proposal.fetch(proposalPda);
-
-  if (proposal.status !== 0) {
-    console.error(`Proposal already finalized. status=${proposal.status}`);
-    process.exit(1);
-  }
-
-  const votes = {
-    for: proposal.votesFor?.toNumber?.() ?? 0,
-    against: proposal.votesAgainst?.toNumber?.() ?? 0,
-    abstain: proposal.votesAbstain?.toNumber?.() ?? 0,
-  };
-  const prompt = buildJudgePrompt(String(proposal.proposalText || ""), votes);
 
   await ensureTreasury(
     program as any,
@@ -54,6 +41,24 @@ async function main() {
     ACTION_LAMPORTS,
     TREASURY_TOPUP_LAMPORTS
   );
+
+  const proposalText = "Demo proposal: execute on-chain action after approval.";
+  const revisionText = "Revision 1: clarify the action recipient.";
+  const { proposalPda } = await createProposalWithRevisionAndVote(
+    program as any,
+    user,
+    proposalText,
+    revisionText,
+    1
+  );
+
+  const proposal = await program.account.proposal.fetch(proposalPda);
+  const votes = {
+    for: proposal.votesFor?.toNumber?.() ?? 0,
+    against: proposal.votesAgainst?.toNumber?.() ?? 0,
+    abstain: proposal.votesAbstain?.toNumber?.() ?? 0,
+  };
+  const prompt = buildJudgePrompt(String(proposal.proposalText || ""), votes);
 
   const judges = [
     anchor.web3.Keypair.generate(),
@@ -79,7 +84,7 @@ async function main() {
       process.exit(1);
     }
 
-    const verdictCode = parseResponse(responseText);
+    const verdictCode = parseVerdict(responseText);
     await program.methods
       .submitJudgeResult(verdictCode)
       .accounts({
@@ -114,8 +119,20 @@ async function main() {
       .rpc();
   }
 
+  const state = await fetchGovernanceState(program as any, proposalPda);
   console.log("proposal:", proposalPda.toBase58());
-  console.log("final_verdict:", updated.finalVerdict);
+  console.log("final_verdict:", state.proposal.finalVerdict);
+  console.log("action_request:", state.actionPda.toBase58());
+  if (state.action) {
+    console.log("action_status:", state.action.status);
+    console.log("action_amount_lamports:", state.action.amountLamports);
+    console.log("action_recipient:", state.action.recipient.toBase58());
+    console.log("action_executor:", state.action.executor.toBase58());
+  } else {
+    console.log("action_status: not_found");
+  }
+  console.log("treasury_vault:", state.vaultPda.toBase58());
+  console.log("treasury_vault_lamports:", state.vaultLamports);
 }
 
 main().catch((e) => {

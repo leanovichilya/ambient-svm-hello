@@ -1,7 +1,6 @@
 import "dotenv/config";
-import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
-import { getProposalPda } from "./governance";
+import { createProposalWithRevisionAndVote } from "./governance";
 
 async function main() {
   const { provider, program } = getProgram();
@@ -9,32 +8,14 @@ async function main() {
 
   const proposalText =
     "Minimal proposal: fund an automation action after approval.";
-  const nonce = new anchor.BN(Date.now());
-  const proposalPda = getProposalPda(program.programId, user, nonce);
-
-  await program.methods
-    .createGovernanceProposal(proposalText, new anchor.BN(0), nonce)
-    .accounts({
-      user,
-    })
-    .rpc();
-
   const revisionText = "Revision 1: clarify the action recipient.";
-  await program.methods
-    .addRevision(new anchor.BN(1), revisionText)
-    .accounts({
-      proposal: proposalPda,
-      user,
-    })
-    .rpc();
-
-  await program.methods
-    .castVote(1)
-    .accounts({
-      proposal: proposalPda,
-      voter: user,
-    })
-    .rpc();
+  const { proposalPda } = await createProposalWithRevisionAndVote(
+    program as any,
+    user,
+    proposalText,
+    revisionText,
+    1
+  );
 
   console.log("proposal:", proposalPda.toBase58());
 }

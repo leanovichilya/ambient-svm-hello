@@ -3,7 +3,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { createHash } from "crypto";
 import { getProgram } from "./anchor";
 import { fetchProposalFromUrl, ProposalDetails } from "./governance_sources";
-import { getArgOrExit } from "./utils";
+import { getArgOrExit, usage } from "./utils";
 
 const MAX_PROPOSAL_TEXT_LEN = 4096;
 const MAX_INSTRUCTION_BYTES = 800;
@@ -90,7 +90,7 @@ async function ensureConfig(
 
 async function main() {
   const proposalUrl = getArgOrExit(
-    "Usage: yarn ts-node scripts/create_proposal_from_url.ts <PROPOSAL_URL>"
+    usage("create_proposal_from_url.ts", "<PROPOSAL_URL>")
   );
 
   const proposal = await fetchProposalFromUrl(proposalUrl);

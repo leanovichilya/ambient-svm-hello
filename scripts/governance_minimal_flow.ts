@@ -1,11 +1,16 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
-import { ensureTreasury, getActionPda, getProposalPda } from "./governance";
-
-const TREASURY_LAMPORTS = 2_000_000;
-const ACTION_LAMPORTS = 1_000_000;
-const JUDGE_LAMPORTS = 2_000_000;
+import {
+  createProposalWithRevisionAndVote,
+  ensureTreasury,
+  fetchGovernanceState,
+} from "./governance";
+import {
+  ACTION_LAMPORTS,
+  JUDGE_LAMPORTS,
+  TREASURY_FUND_LAMPORTS,
+} from "./constants";
 
 async function fundWallet(
   provider: anchor.AnchorProvider,
@@ -28,7 +33,7 @@ async function main() {
 
   await ensureTreasury(program as any, provider, 0, 0);
   await program.methods
-    .fundTreasury(new anchor.BN(TREASURY_LAMPORTS))
+    .fundTreasury(new anchor.BN(TREASURY_FUND_LAMPORTS))
     .accounts({
       funder: user,
     })
@@ -36,32 +41,14 @@ async function main() {
 
   const proposalText =
     "Minimal proposal: fund an automation action after approval.";
-  const nonce = new anchor.BN(Date.now());
-  const proposalPda = getProposalPda(program.programId, user, nonce);
-
-  await program.methods
-    .createGovernanceProposal(proposalText, new anchor.BN(0), nonce)
-    .accounts({
-      user,
-    })
-    .rpc();
-
   const revisionText = "Revision 1: clarify the action recipient.";
-  await program.methods
-    .addRevision(new anchor.BN(1), revisionText)
-    .accounts({
-      proposal: proposalPda,
-      user,
-    })
-    .rpc();
-
-  await program.methods
-    .castVote(1)
-    .accounts({
-      proposal: proposalPda,
-      voter: user,
-    })
-    .rpc();
+  const { proposalPda } = await createProposalWithRevisionAndVote(
+    program as any,
+    user,
+    proposalText,
+    revisionText,
+    1
+  );
 
   const judges = [
     anchor.web3.Keypair.generate(),
@@ -119,17 +106,22 @@ async function main() {
     })
     .rpc();
 
-  const proposal = await program.account.proposal.fetch(proposalPda);
-  const actionPda = getActionPda(program.programId, proposalPda);
-  const action = await program.account.actionRequest.fetch(actionPda);
+  const { proposal, action, actionPda } = await fetchGovernanceState(
+    program as any,
+    proposalPda
+  );
 
   console.log("proposal:", proposalPda.toBase58());
   console.log("final_verdict:", proposal.finalVerdict);
   console.log("action_request:", actionPda.toBase58());
-  console.log("action_status:", action.status);
-  console.log("action_amount_lamports:", action.amountLamports);
-  console.log("action_recipient:", action.recipient.toBase58());
-  console.log("action_executor:", action.executor.toBase58());
+  if (action) {
+    console.log("action_status:", action.status);
+    console.log("action_amount_lamports:", action.amountLamports);
+    console.log("action_recipient:", action.recipient.toBase58());
+    console.log("action_executor:", action.executor.toBase58());
+  } else {
+    console.log("action_status: not_found");
+  }
   console.log("expected_action_lamports:", ACTION_LAMPORTS);
 }
 

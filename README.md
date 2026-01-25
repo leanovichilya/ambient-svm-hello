@@ -138,6 +138,12 @@ Notes
 yarn ts-node scripts/read_governance_state.ts <PROPOSAL_PDA>
 ```
 
+### Demo Runner (All-in-one)
+Runs the full governance flow in one command (create proposal + 3 AI judges + consensus + action execution).
+```bash
+yarn ts-node scripts/demo_runner.ts
+```
+
 Example run (devnet, proposal summarizer)
 - Proposal Request PDA: MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw
 - Fulfill tx: 3GpoMprk6boCeWfv9AYCZDjEsKJjXeHJTdGrKCacbQ5pYo4CEkd4ArbqscLiQbnGQqvNKsuhX4hu9oPkaBi5FJVz

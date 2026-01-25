@@ -7,49 +7,22 @@ import {
   GovernanceSource,
   VotesSummary,
 } from "./governance_sources";
-import { getArgOrExit, normalizeVerdict, parseJsonBlock, sha256Bytes } from "./utils";
-
-const MAX_SUMMARY_WORDS = 60;
-const MAX_SUMMARY_CHARS = 400;
-const MAX_LIST_ITEMS = 5;
-const MAX_LIST_ITEM_CHARS = 120;
-
-function buildProposalPrompt(
-  proposalText: string,
-  votesSummary: VotesSummary | null
-): string {
-  const votesLine = votesSummary ? JSON.stringify(votesSummary) : "unavailable";
-  return [
-    "You are an AI governance assistant. Evaluate the proposal under a \"trust and verification\" mindset.",
-    "Return JSON only, with no extra text.",
-    "Do not use markdown or code fences.",
-    "",
-    "Schema:",
-    "{",
-    "\"verdict\": \"approve\" | \"reject\" | \"needs_more_info\",",
-    "\"summary\": \"one short paragraph\",",
-    "\"missing_info\": [\"bullet\", \"bullet\", \"bullet\"],",
-    "\"risks\": [\"bullet\", \"bullet\", \"bullet\"]",
-    "}",
-    "",
-    "Rules:",
-    "",
-    "Keep summary under 60 words.",
-    "",
-    "Be conservative. Use \"needs_more_info\" if any key detail is missing (budget cap, scope, owners, timeline, success metric) or if the data is sparse.",
-    "If vote summary is unavailable or indicates low participation, prefer \"needs_more_info\".",
-    "",
-    "Do not invent facts that are not in the proposal.",
-    "",
-    "If the proposal asks for anything unsafe or illegal, verdict must be \"reject\".",
-    "",
-    "Vote summary (if available):",
-    votesLine,
-    "",
-    "Proposal:",
-    proposalText,
-  ].join("\n");
-}
+import { buildProposalPrompt } from "./prompts";
+import {
+  getArgOrExit,
+  getModelIdOrExit,
+  normalizeVerdict,
+  parseJsonBlock,
+  requireEnv,
+  sha256Bytes,
+  usage,
+} from "./utils";
+import {
+  MAX_LIST_ITEM_CHARS,
+  MAX_LIST_ITEMS,
+  MAX_SUMMARY_CHARS,
+  MAX_SUMMARY_WORDS,
+} from "./constants";
 
 function countWords(text: string): number {
   const trimmed = text.trim();
@@ -94,19 +67,11 @@ function parseResponse(text: string): { verdictCode: number; summary: string } {
 
 async function main() {
   const requestPdaStr = getArgOrExit(
-    "Usage: yarn ts-node scripts/relayer_proposal_fulfill.ts <PROPOSAL_REQUEST_PDA>"
+    usage("relayer_proposal_fulfill.ts", "<PROPOSAL_REQUEST_PDA>")
   );
 
-  const AMBIENT_API_KEY = process.env.AMBIENT_API_KEY;
-  if (!AMBIENT_API_KEY) {
-    console.error("Missing AMBIENT_API_KEY in env");
-    process.exit(1);
-  }
-  const MODEL_ID = process.env.AMBIENT_MODEL_ID || "ambient-1";
-  if (MODEL_ID.length > 64) {
-    console.error("AMBIENT_MODEL_ID too long");
-    process.exit(1);
-  }
+  const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
+  const MODEL_ID = getModelIdOrExit();
 
   const { provider, program } = getProgram();
 

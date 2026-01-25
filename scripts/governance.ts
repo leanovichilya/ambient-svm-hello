@@ -82,3 +82,64 @@ export async function ensureTreasury(
   }
   return { treasuryPda, vaultPda };
 }
+
+export async function createProposalWithRevisionAndVote(
+  program: anchor.Program,
+  authority: anchor.web3.PublicKey,
+  proposalText: string,
+  revisionText: string,
+  voteChoice: number,
+  nonce?: anchor.BN
+): Promise<{ proposalPda: anchor.web3.PublicKey; nonce: anchor.BN }> {
+  const usedNonce = nonce ?? new anchor.BN(Date.now());
+  const proposalPda = getProposalPda(program.programId, authority, usedNonce);
+
+  await program.methods
+    .createGovernanceProposal(proposalText, new anchor.BN(0), usedNonce)
+    .accounts({
+      user: authority,
+    })
+    .rpc();
+
+  await program.methods
+    .addRevision(new anchor.BN(1), revisionText)
+    .accounts({
+      proposal: proposalPda,
+      user: authority,
+    })
+    .rpc();
+
+  await program.methods
+    .castVote(voteChoice)
+    .accounts({
+      proposal: proposalPda,
+      voter: authority,
+    })
+    .rpc();
+
+  return { proposalPda, nonce: usedNonce };
+}
+
+export async function fetchGovernanceState(
+  program: anchor.Program,
+  proposalPda: anchor.web3.PublicKey
+): Promise<{
+  proposal: any;
+  action: any | null;
+  actionPda: anchor.web3.PublicKey;
+  vaultPda: anchor.web3.PublicKey;
+  vaultLamports: number;
+}> {
+  const proposal = await program.account.proposal.fetch(proposalPda);
+  const actionPda = getActionPda(program.programId, proposalPda);
+  let action: any | null = null;
+  try {
+    action = await program.account.actionRequest.fetch(actionPda);
+  } catch {
+    action = null;
+  }
+  const vaultPda = getTreasuryVaultPda(program.programId);
+  const vaultLamports =
+    (await program.provider.connection.getAccountInfo(vaultPda))?.lamports ?? 0;
+  return { proposal, action, actionPda, vaultPda, vaultLamports };
+}
