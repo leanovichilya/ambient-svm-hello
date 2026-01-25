@@ -1,12 +1,8 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import {Program} from "@coral-xyz/anchor";
-import {createHash} from "crypto";
-import {AmbientSvmHello} from "../target/types/ambient_svm_hello";
-
-function sha256Bytes(text: string): number[] {
-    return Array.from(createHash("sha256").update(text, "utf8").digest());
-}
+import { callAmbient } from "./ambient";
+import { getProgram } from "./anchor";
+import { extractJsonBlock, getArgOrExit, sha256Bytes } from "./utils";
 
 function buildJudgePrompt(criteria: string, inputA: string, inputB: string): string {
     return [
@@ -22,17 +18,6 @@ function buildJudgePrompt(criteria: string, inputA: string, inputB: string): str
         "Input B:",
         inputB,
     ].join("\n");
-}
-
-function extractJsonBlock(text: string): string | null {
-    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const body = fenceMatch ? fenceMatch[1] : text;
-    const start = body.indexOf("{");
-    const end = body.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) {
-        return null;
-    }
-    return body.slice(start, end + 1);
 }
 
 function normalizeWinner(raw: string): number {
@@ -64,11 +49,7 @@ function parseDecision(text: string): number {
 }
 
 async function main() {
-    const requestPdaStr = process.argv[2];
-    if (!requestPdaStr) {
-        console.error("Usage: yarn ts-node scripts/relayer_fulfill.ts <REQUEST_PDA>");
-        process.exit(1);
-    }
+    const requestPdaStr = getArgOrExit("Usage: yarn ts-node scripts/relayer_fulfill.ts <REQUEST_PDA>");
 
     const AMBIENT_API_KEY = process.env.AMBIENT_API_KEY;
     if (!AMBIENT_API_KEY) {
@@ -76,10 +57,7 @@ async function main() {
         process.exit(1);
     }
 
-    const provider = anchor.AnchorProvider.env();
-    anchor.setProvider(provider);
-
-    const program = anchor.workspace.AmbientSvmHello as Program<AmbientSvmHello>;
+    const { provider, program } = getProgram();
 
     const user = provider.wallet.publicKey;
     const requestPda = new anchor.web3.PublicKey(requestPdaStr);
@@ -93,33 +71,11 @@ async function main() {
     console.log("criteria:", criteria);
     console.log("input A:", inputA);
     console.log("input B:", inputB);
-
-    const res = await fetch("https://api.ambient.xyz/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${AMBIENT_API_KEY}`,
-        },
-        body: JSON.stringify({
-            model: "ambient-1",
-            stream: false,
-            emit_verified: true,
-            wait_for_verification: false,
-            messages: [{role: "user", content: prompt}],
-        }),
-    });
-
-    if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Ambient API error ${res.status}: ${t}`);
-    }
-
-    const data: any = await res.json();
-
-    const responseText =
-        data?.choices?.[0]?.message?.content ??
-        data?.choices?.[0]?.delta?.content ??
-        "";
+    const { data, responseText, receiptRootBytes } = await callAmbient(
+        prompt,
+        "ambient-1",
+        AMBIENT_API_KEY
+    );
 
     if (!responseText) {
         console.error("Could not parse response text. Full response keys:", Object.keys(data));
@@ -128,12 +84,6 @@ async function main() {
     }
 
     console.log("model response:", responseText);
-
-    const merkleRoot = data?.receipt?.merkle_root ?? data?.merkle_root ?? null;
-    const receiptRootBytes = merkleRoot
-        ? Array.from(Buffer.from(String(merkleRoot).replace(/^0x/, ""), "hex"))
-        : new Array(32).fill(0);
-
     const decision = parseDecision(responseText);
     console.log("parsed decision:", decision);
     const responseHash = sha256Bytes(responseText);

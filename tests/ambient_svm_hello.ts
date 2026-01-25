@@ -22,9 +22,7 @@ describe("ambient_svm_hello (devnet)", () => {
       await program.methods
         .initConfig(user)
         .accounts({
-          config: configPda,
           admin: user,
-          systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();
       console.log("config inited:", configPda.toBase58());
@@ -62,10 +60,7 @@ Add .env.example with placeholder value and README instructions to copy it to .e
     await program.methods
       .createJudgeRequest(criteria, inputA, inputB, nonce)
       .accounts({
-        config: configPda,
-        request: requestPda,
         user,
-        systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc();
 
@@ -76,5 +71,54 @@ Add .env.example with placeholder value and README instructions to copy it to .e
     console.log("criteria:", req.criteria);
     console.log("inputA:", req.inputA);
     console.log("inputB:", req.inputB);
+  });
+
+  it("create_proposal_request", async () => {
+    const user = provider.wallet.publicKey;
+
+    const [configPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId
+    );
+
+    const cfgInfo = await provider.connection.getAccountInfo(configPda);
+    if (!cfgInfo) {
+      await program.methods
+        .initConfig(user)
+        .accounts({
+          config: configPda,
+          admin: user,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+      console.log("config inited:", configPda.toBase58());
+    }
+
+    const source = "manual";
+    const proposalId = "local";
+    const proposalText =
+      "Proposal: Allocate 5% of the treasury to fund quarterly security audits and publish a public report.";
+    const nonce = new anchor.BN(Date.now());
+
+    const [requestPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("proposal"),
+        user.toBuffer(),
+        nonce.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+
+    await program.methods
+      .createProposalRequest(source, proposalId, proposalText, nonce)
+      .accounts({
+        user,
+      })
+      .rpc();
+
+    console.log("proposal request created:", requestPda.toBase58());
+
+    const req = await program.account.proposalRequest.fetch(requestPda);
+    console.log("proposal status:", req.status);
   });
 });
