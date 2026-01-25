@@ -3,6 +3,14 @@
 ## Weeks
 current = Week 3
 
+### Governance extensions (minimal)
+
+Adds minimal support for revisions, voting, multi-judge consensus, and automation:
+- Proposal + ProposalRevision accounts
+- VoteRecord (1 wallet = 1 vote, For/Against/Abstain)
+- JudgeResult (3 judges) + finalize_consensus (majority)
+- ActionRequest created on finalize; complete_action transfers a fixed amount from treasury to proposal author
+
 ### Week 3 Web3 Experiment 3: AI-driven governance (AI proposal summarizer)
 
 Goal: minimal on-chain proposal flow that
@@ -73,6 +81,45 @@ yarn ts-node scripts/relayer_proposal_fulfill.ts <PROPOSAL_REQUEST_PDA>
 ```bash
 yarn ts-node scripts/read_proposal_request.ts <PROPOSAL_REQUEST_PDA>
 ```
+
+How to run (Governance minimal flow)
+1) Build
+```bash
+anchor build
+```
+
+2) Deploy (devnet) if the program changed
+```bash
+anchor deploy --no-idl
+```
+
+3) Run the minimal flow (creates proposal, revision, votes, 3 judge results, consensus, and action)
+```bash
+yarn ts-node scripts/governance_minimal_flow.ts
+```
+
+Notes
+- ActionRequest uses a fixed transfer amount of 0.001 SOL from the treasury PDA.
+- The script funds the treasury PDA with 0.002 SOL from your wallet before running the flow.
+- Treasury funds are held in a separate PDA vault (`treasury_vault`) to allow system transfers.
+
+Read governance state
+```bash
+yarn ts-node scripts/read_governance_state.ts <PROPOSAL_PDA>
+```
+
+Execute pending action
+```bash
+yarn ts-node scripts/execute_action.ts <PROPOSAL_PDA>
+```
+
+Example run (devnet, governance minimal)
+- Proposal PDA: YfHqJZwGK4MERzUPWz4CrnY78vYxzaSaWQp7ANFLLL7
+- Action PDA: 25RGL5Bw62ZaWmhBp4SdEpKZCUb5WYzszsDHVopUgFzq
+- Treasury vault PDA: 25U9QMCA3Z76i72EjKX1WEv7GDYKUPCpNWMdiJSQWHdY
+- Final verdict: 1 (approve)
+- Votes: for=1 against=0 abstain=0
+- Judge results: approve=2 reject=1 needs=0
 
 Example run (devnet)
 - Proposal Request PDA: MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw (Explorer: https://explorer.solana.com/address/MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw?cluster=devnet)
