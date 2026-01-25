@@ -128,6 +128,26 @@ Execute pending action
 yarn ts-node scripts/execute_action.ts <PROPOSAL_PDA>
 ```
 
+How to run (AI judges + consensus)
+1) Create a proposal (no judges yet)
+```bash
+yarn ts-node scripts/create_governance_proposal.ts
+```
+
+2) Run AI judges (3 Ambient calls), finalize consensus, and auto-complete action on approve
+```bash
+yarn ts-node scripts/ai_judge_consensus.ts <PROPOSAL_PDA>
+```
+Notes
+- Requires AMBIENT_API_KEY (and optional AMBIENT_MODEL_ID)
+- Logs receipt_root when the API returns a verified receipt
+- Ensures treasury and vault exist, and tops up the vault if needed for action execution
+
+3) Read state
+```bash
+yarn ts-node scripts/read_governance_state.ts <PROPOSAL_PDA>
+```
+
 Example run (devnet, governance minimal)
 - Proposal PDA: YfHqJZwGK4MERzUPWz4CrnY78vYxzaSaWQp7ANFLLL7
 - Action PDA: 25RGL5Bw62ZaWmhBp4SdEpKZCUb5WYzszsDHVopUgFzq
@@ -135,6 +155,18 @@ Example run (devnet, governance minimal)
 - Final verdict: 1 (approve)
 - Votes: for=1 against=0 abstain=0
 - Judge results: approve=2 reject=1 needs=0
+
+Example run (devnet, AI judges + consensus)
+- Proposal PDA: ALAWAgzjkWk8mdn5M227dPXdgDefdkLcwcvujx2BFicU
+- Action PDA: FCPgeA54xBGftEqe6Z1bYuy5Bmv2zEWnQgZkeo5F6H8Q
+- Treasury vault PDA: 25U9QMCA3Z76i72EjKX1WEv7GDYKUPCpNWMdiJSQWHdY
+- Final verdict: 3 (needs_more_info)
+- Votes: for=1 against=0 abstain=0
+- Judge results: approve=0 reject=0 needs=3
+- Receipt roots (3 judges):
+  - 2dec920d5de22f3d0dd08a18d0f6428e11fcbe67563b74b6ef9faa19dca3907e
+  - 08172b44a0051d1a0627a6f15acb54c267b4956ef77e4cdba18374fa4747d526
+  - f4deae173e6b0e9ce83dc87686ef7b5eeed9072b90ec9b8764e5b6d03a76833a
 
 Example run (devnet)
 - Proposal Request PDA: MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw (Explorer: https://explorer.solana.com/address/MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw?cluster=devnet)
