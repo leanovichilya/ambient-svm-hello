@@ -142,11 +142,12 @@ export async function fetchGovernanceState(
   vaultPda: anchor.web3.PublicKey;
   vaultLamports: number;
 }> {
-  const proposal = await program.account.proposal.fetch(proposalPda);
+  const accountNs: any = (program as any).account;
+  const proposal = await accountNs.proposal.fetch(proposalPda);
   const actionPda = getActionPda(program.programId, proposalPda);
   let action: any | null = null;
   try {
-    action = await program.account.actionRequest.fetch(actionPda);
+    action = await accountNs.actionRequest.fetch(actionPda);
   } catch {
     action = null;
   }
