@@ -1,3 +1,5 @@
+import { fetchWithRetry } from "./net";
+
 export function merkleRootBytes(merkleRoot: string): number[] {
   let hex = String(merkleRoot).replace(/^0x/, "");
   if (hex.length % 2 === 1) {
@@ -23,27 +25,42 @@ export class AmbientApiError extends Error {
 export async function callAmbient(
   prompt: string,
   modelId: string,
-  apiKey: string
+  apiKey: string,
+  options?: {
+    retries?: number;
+    retryOnStatuses?: number[];
+    backoffMs?: number;
+    maxBackoffMs?: number;
+  }
 ): Promise<{
   data: any;
   responseText: string;
   receiptRootBytes: number[];
   receiptPresent: boolean;
 }> {
-  const res = await fetch("https://api.ambient.xyz/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const res = await fetchWithRetry(
+    "https://api.ambient.xyz/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelId,
+        stream: false,
+        emit_verified: true,
+        wait_for_verification: false,
+        messages: [{ role: "user", content: prompt }],
+      }),
     },
-    body: JSON.stringify({
-      model: modelId,
-      stream: false,
-      emit_verified: true,
-      wait_for_verification: false,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+    {
+      retries: options?.retries ?? 2,
+      retryOnStatuses: options?.retryOnStatuses ?? [429, 500],
+      backoffMs: options?.backoffMs ?? 500,
+      maxBackoffMs: options?.maxBackoffMs ?? 4000,
+    }
+  );
 
   if (!res.ok) {
     const t = await res.text();

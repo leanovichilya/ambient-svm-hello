@@ -47,6 +47,10 @@ Copy `.env.example` to `.env` and fill in secrets. AMBIENT_API_KEY is required. 
 ```bash
 cp .env.example .env
 ```
+Optional env validation:
+```bash
+yarn ts-node scripts/validate_env.ts
+```
 
 How to run (proposal summarizer)
 1) Build
@@ -143,6 +147,10 @@ Runs the full governance flow in one command (create proposal + 3 AI judges + co
 ```bash
 yarn ts-node scripts/demo_runner.ts
 ```
+Flags:
+- `--skip-judges` to skip Ambient calls and consensus
+- `--skip-action` to skip action execution
+- `--proposal <PDA>` to reuse an existing proposal
 
 Example run (devnet, proposal summarizer)
 - Proposal Request PDA: MHMch9Zb4QkLQXarTaNgoTocZ5Nvh9yN95EQRGi7nWw

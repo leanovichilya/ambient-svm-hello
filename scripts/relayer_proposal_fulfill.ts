@@ -98,7 +98,7 @@ async function main() {
 
   let ambientResult;
   try {
-    ambientResult = await callAmbient(prompt, MODEL_ID, AMBIENT_API_KEY);
+    ambientResult = await callAmbient(prompt, MODEL_ID, AMBIENT_API_KEY, { retries: 0 });
   } catch (e) {
     if (e instanceof AmbientApiError && (e.status === 429 || e.status === 500)) {
       console.error(`Ambient API ${e.status}`);

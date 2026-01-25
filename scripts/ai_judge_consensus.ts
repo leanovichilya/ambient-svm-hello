@@ -2,7 +2,7 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { ensureTreasury } from "./governance";
+import { ensureTreasury, extractVotesSummary, getProposalText } from "./governance";
 import { buildJudgePrompt } from "./prompts";
 import {
   getArgOrExit,
@@ -41,12 +41,8 @@ async function main() {
     process.exit(1);
   }
 
-  const votes = {
-    for: proposal.votesFor?.toNumber?.() ?? 0,
-    against: proposal.votesAgainst?.toNumber?.() ?? 0,
-    abstain: proposal.votesAbstain?.toNumber?.() ?? 0,
-  };
-  const prompt = buildJudgePrompt(String(proposal.proposalText || ""), votes);
+  const votes = extractVotesSummary(proposal as any);
+  const prompt = buildJudgePrompt(getProposalText(proposal), votes);
 
   await ensureTreasury(
     program as any,

@@ -78,7 +78,8 @@ async function main() {
     const { data, responseText, receiptRootBytes } = await callAmbient(
         prompt,
         MODEL_ID,
-        AMBIENT_API_KEY
+        AMBIENT_API_KEY,
+        { retries: 0 }
     );
 
     if (!responseText) {

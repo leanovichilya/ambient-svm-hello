@@ -1,3 +1,5 @@
+import { fetchWithRetry } from "./net";
+
 export type GovernanceSource = "snapshot" | "tally" | "unknown";
 
 export type ProposalDetails = {
@@ -19,6 +21,38 @@ export type VotesSummary = {
   scores_total: number | null;
   scores: number[] | null;
   choices: string[] | null;
+};
+
+type GraphqlError = { message?: string };
+type GraphqlResponse<T> = { data?: T; errors?: GraphqlError[] };
+
+type SnapshotProposal = {
+  id?: string;
+  title?: string;
+  body?: string;
+  choices?: string[];
+  start?: number;
+  end?: number;
+  author?: string;
+  space?: { id?: string } | null;
+  scores?: number[];
+  scores_total?: number;
+  votes?: number;
+};
+
+type TallyOrganization = { slug?: string; name?: string };
+type TallyGovernor = { id: string; slug?: string; organization?: TallyOrganization | null };
+type TallyVoteStat = { type?: string; votesCount?: number; votersCount?: number };
+type TallyTimestamp = { timestamp?: number } | null;
+type TallyProposal = {
+  id?: string;
+  onchainId?: string;
+  metadata?: { title?: string; description?: string } | null;
+  proposer?: { address?: string } | null;
+  start?: TallyTimestamp;
+  end?: TallyTimestamp;
+  voteStats?: TallyVoteStat[] | null;
+  governor?: TallyGovernor | null;
 };
 
 export function detectSource(url: string): GovernanceSource {
@@ -61,50 +95,64 @@ function parseTallyUrl(
   return null;
 }
 
-async function snapshotGraphql<T>(query: string, variables: Record<string, any>): Promise<T> {
-  const res = await fetch("https://hub.snapshot.org/graphql", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
-  });
-  const data: any = await res.json();
-  if (!res.ok || data?.errors?.length) {
-    const message = data?.errors?.[0]?.message || `Snapshot API error ${res.status}`;
+async function snapshotGraphql<T>(
+  query: string,
+  variables: Record<string, unknown>
+): Promise<T> {
+  const res = await fetchWithRetry(
+    "https://hub.snapshot.org/graphql",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+    },
+    { retries: 2, retryOnStatuses: [429, 500], backoffMs: 500, maxBackoffMs: 4000 }
+  );
+  const data = (await res.json()) as GraphqlResponse<T>;
+  if (!res.ok || data.errors?.length) {
+    const message = data.errors?.[0]?.message || `Snapshot API error ${res.status}`;
     throw new Error(message);
   }
   return data.data as T;
 }
 
-async function tallyGraphql<T>(query: string, variables: Record<string, any>): Promise<T> {
+async function tallyGraphql<T>(
+  query: string,
+  variables: Record<string, unknown>
+): Promise<T> {
   const apiKey = process.env.TALLY_API_KEY;
   if (!apiKey) {
     throw new Error("Missing TALLY_API_KEY in env");
   }
-  const res = await fetch("https://api.tally.xyz/query", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Api-Key": apiKey },
-    body: JSON.stringify({ query, variables }),
-  });
-  const data: any = await res.json();
-  if (!res.ok || data?.errors?.length) {
-    const message = data?.errors?.[0]?.message || `Tally API error ${res.status}`;
+  const res = await fetchWithRetry(
+    "https://api.tally.xyz/query",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Api-Key": apiKey },
+      body: JSON.stringify({ query, variables }),
+    },
+    { retries: 2, retryOnStatuses: [429, 500], backoffMs: 500, maxBackoffMs: 4000 }
+  );
+  const data = (await res.json()) as GraphqlResponse<T>;
+  if (!res.ok || data.errors?.length) {
+    const message = data.errors?.[0]?.message || `Tally API error ${res.status}`;
     throw new Error(message);
   }
   return data.data as T;
 }
 
-function tallyTimestamp(node: any): number {
+function tallyTimestamp(node: { timestamp?: number; ts?: number } | null | undefined): number {
   const ts = node?.timestamp ?? node?.ts;
   const n = Number(ts || 0);
   return Number.isFinite(n) ? n : 0;
 }
 
-function toNumber(value: any): number | null {
+function toNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-async function fetchTallyGovernor(slug: string): Promise<any> {
+async function fetchTallyGovernor(slug: string): Promise<TallyGovernor> {
   const query = `
     query Governor($input: GovernorInput!) {
       governor(input: $input) {
@@ -114,7 +162,9 @@ async function fetchTallyGovernor(slug: string): Promise<any> {
       }
     }
   `;
-  const data = await tallyGraphql<{ governor: any }>(query, { input: { slug } });
+  const data = await tallyGraphql<{ governor?: TallyGovernor }>(query, {
+    input: { slug },
+  });
   if (!data?.governor) {
     throw new Error("Tally governor not found");
   }
@@ -124,7 +174,7 @@ async function fetchTallyGovernor(slug: string): Promise<any> {
 async function fetchTallyProposalByOnchain(
   governorId: string,
   onchainId: string
-): Promise<any> {
+): Promise<TallyProposal> {
   const query = `
     query Proposal($input: ProposalInput!) {
       proposal(input: $input) {
@@ -139,7 +189,7 @@ async function fetchTallyProposalByOnchain(
       }
     }
   `;
-  const data = await tallyGraphql<{ proposal: any }>(query, {
+  const data = await tallyGraphql<{ proposal?: TallyProposal }>(query, {
     input: { onchainId, governorId },
   });
   if (!data?.proposal) {
@@ -148,7 +198,7 @@ async function fetchTallyProposalByOnchain(
   return data.proposal;
 }
 
-async function fetchTallyProposalById(proposalId: string): Promise<any> {
+async function fetchTallyProposalById(proposalId: string): Promise<TallyProposal> {
   const query = `
     query Proposal($input: ProposalInput!) {
       proposal(input: $input) {
@@ -157,7 +207,9 @@ async function fetchTallyProposalById(proposalId: string): Promise<any> {
       }
     }
   `;
-  const data = await tallyGraphql<{ proposal: any }>(query, { input: { id: proposalId } });
+  const data = await tallyGraphql<{ proposal?: TallyProposal }>(query, {
+    input: { id: proposalId },
+  });
   if (!data?.proposal) {
     throw new Error("Tally proposal not found");
   }
@@ -179,20 +231,23 @@ async function fetchSnapshotProposal(proposalId: string): Promise<ProposalDetail
       }
     }
   `;
-  const data = await snapshotGraphql<{ proposal: any }>(query, { id: proposalId });
-  if (!data?.proposal) {
+  const data = await snapshotGraphql<{ proposal?: SnapshotProposal }>(query, {
+    id: proposalId,
+  });
+  const proposal = data?.proposal;
+  if (!proposal) {
     throw new Error("Snapshot proposal not found");
   }
   return {
     source: "snapshot",
-    proposal_id: data.proposal.id,
-    title: data.proposal.title || "",
-    body: data.proposal.body || "",
-    choices: Array.isArray(data.proposal.choices) ? data.proposal.choices : [],
-    start: Number(data.proposal.start || 0),
-    end: Number(data.proposal.end || 0),
-    author: data.proposal.author || "",
-    space: data.proposal.space?.id || "",
+    proposal_id: proposal.id || "",
+    title: proposal.title || "",
+    body: proposal.body || "",
+    choices: Array.isArray(proposal.choices) ? proposal.choices : [],
+    start: Number(proposal.start || 0),
+    end: Number(proposal.end || 0),
+    author: proposal.author || "",
+    space: proposal.space?.id || "",
   };
 }
 
@@ -205,7 +260,7 @@ async function fetchTallyProposal(
   const proposal = await fetchTallyProposalByOnchain(governor.id, onchainId);
   const voteStats = Array.isArray(proposal.voteStats) ? proposal.voteStats : [];
   const choices = voteStats.length
-    ? voteStats.map((stat: any) => String(stat?.type ?? "")).filter((v) => v)
+    ? voteStats.map((stat) => String(stat?.type ?? "")).filter((v) => v)
     : ["for", "against", "abstain"];
   const space = proposal.governor?.organization?.slug || proposal.governor?.slug || slug;
   return {
@@ -233,17 +288,20 @@ async function fetchSnapshotVotesSummary(proposalId: string): Promise<VotesSumma
       }
     }
   `;
-  const data = await snapshotGraphql<{ proposal: any }>(query, { id: proposalId });
-  if (!data?.proposal) return null;
+  const data = await snapshotGraphql<{ proposal?: SnapshotProposal }>(query, {
+    id: proposalId,
+  });
+  const proposal = data?.proposal;
+  if (!proposal) return null;
   return {
     source: "snapshot",
-    proposal_id: data.proposal.id,
-    total_votes: Number.isFinite(data.proposal.votes) ? Number(data.proposal.votes) : null,
-    scores_total: Number.isFinite(data.proposal.scores_total)
-      ? Number(data.proposal.scores_total)
+    proposal_id: proposal.id || "",
+    total_votes: Number.isFinite(proposal.votes) ? Number(proposal.votes) : null,
+    scores_total: Number.isFinite(proposal.scores_total)
+      ? Number(proposal.scores_total)
       : null,
-    scores: Array.isArray(data.proposal.scores) ? data.proposal.scores : null,
-    choices: Array.isArray(data.proposal.choices) ? data.proposal.choices : null,
+    scores: Array.isArray(proposal.scores) ? proposal.scores : null,
+    choices: Array.isArray(proposal.choices) ? proposal.choices : null,
   };
 }
 
@@ -251,9 +309,9 @@ async function fetchTallyVotesSummary(proposalId: string): Promise<VotesSummary 
   const proposal = await fetchTallyProposalById(proposalId);
   const stats = Array.isArray(proposal.voteStats) ? proposal.voteStats : [];
   if (!stats.length) return null;
-  const choices = stats.map((stat: any) => String(stat?.type ?? "")).filter((v) => v);
-  const scoreValues = stats.map((stat: any) => toNumber(stat?.votesCount));
-  const voterValues = stats.map((stat: any) => toNumber(stat?.votersCount));
+  const choices = stats.map((stat) => String(stat?.type ?? "")).filter((v) => v);
+  const scoreValues = stats.map((stat) => toNumber(stat?.votesCount));
+  const voterValues = stats.map((stat) => toNumber(stat?.votersCount));
   const scores =
     scoreValues.length && scoreValues.every((v) => v !== null)
       ? (scoreValues as number[])

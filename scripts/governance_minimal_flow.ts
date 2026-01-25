@@ -5,6 +5,7 @@ import {
   createProposalWithRevisionAndVote,
   ensureTreasury,
   fetchGovernanceState,
+  logGovernanceState,
 } from "./governance";
 import {
   ACTION_LAMPORTS,
@@ -106,22 +107,8 @@ async function main() {
     })
     .rpc();
 
-  const { proposal, action, actionPda } = await fetchGovernanceState(
-    program as any,
-    proposalPda
-  );
-
-  console.log("proposal:", proposalPda.toBase58());
-  console.log("final_verdict:", proposal.finalVerdict);
-  console.log("action_request:", actionPda.toBase58());
-  if (action) {
-    console.log("action_status:", action.status);
-    console.log("action_amount_lamports:", action.amountLamports);
-    console.log("action_recipient:", action.recipient.toBase58());
-    console.log("action_executor:", action.executor.toBase58());
-  } else {
-    console.log("action_status: not_found");
-  }
+  const state = await fetchGovernanceState(program as any, proposalPda);
+  logGovernanceState(proposalPda, state);
   console.log("expected_action_lamports:", ACTION_LAMPORTS);
 }
 

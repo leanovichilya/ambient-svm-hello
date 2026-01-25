@@ -12,6 +12,26 @@ export function getProposalPda(
   return proposalPda;
 }
 
+type TreasuryCache = { treasuryPda: anchor.web3.PublicKey; vaultPda: anchor.web3.PublicKey };
+const treasuryCache = new Map<string, TreasuryCache>();
+
+function getTreasuryCache(programId: anchor.web3.PublicKey): TreasuryCache {
+  const key = programId.toBase58();
+  const cached = treasuryCache.get(key);
+  if (cached) return cached;
+  const [treasuryPda] = anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury")],
+    programId
+  );
+  const [vaultPda] = anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury_vault")],
+    programId
+  );
+  const value = { treasuryPda, vaultPda };
+  treasuryCache.set(key, value);
+  return value;
+}
+
 export function getActionPda(
   programId: anchor.web3.PublicKey,
   proposalPda: anchor.web3.PublicKey
@@ -24,21 +44,13 @@ export function getActionPda(
 }
 
 export function getTreasuryPda(programId: anchor.web3.PublicKey): anchor.web3.PublicKey {
-  const [treasuryPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury")],
-    programId
-  );
-  return treasuryPda;
+  return getTreasuryCache(programId).treasuryPda;
 }
 
 export function getTreasuryVaultPda(
   programId: anchor.web3.PublicKey
 ): anchor.web3.PublicKey {
-  const [vaultPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("treasury_vault")],
-    programId
-  );
-  return vaultPda;
+  return getTreasuryCache(programId).vaultPda;
 }
 
 export async function ensureTreasury(
@@ -142,4 +154,57 @@ export async function fetchGovernanceState(
   const vaultLamports =
     (await program.provider.connection.getAccountInfo(vaultPda))?.lamports ?? 0;
   return { proposal, action, actionPda, vaultPda, vaultLamports };
+}
+
+export function getProposalText(proposal: { proposalText?: unknown }): string {
+  return String(proposal?.proposalText ?? "");
+}
+
+export function extractVotesSummary(proposal: {
+  votesFor?: any;
+  votesAgainst?: any;
+  votesAbstain?: any;
+}): { for: number; against: number; abstain: number } {
+  const toNum = (v: any): number => (v?.toNumber ? v.toNumber() : Number(v || 0));
+  return {
+    for: toNum(proposal.votesFor),
+    against: toNum(proposal.votesAgainst),
+    abstain: toNum(proposal.votesAbstain),
+  };
+}
+
+export function logGovernanceState(
+  proposalPda: anchor.web3.PublicKey,
+  state: {
+    proposal: any;
+    action: any | null;
+    actionPda: anchor.web3.PublicKey;
+    vaultPda: anchor.web3.PublicKey;
+    vaultLamports: number;
+  }
+): void {
+  const { proposal, action, actionPda, vaultPda, vaultLamports } = state;
+  console.log("proposal:", proposalPda.toBase58());
+  console.log("authority:", proposal.authority.toBase58());
+  console.log("status:", proposal.status);
+  console.log("revision_count:", proposal.revisionCount);
+  console.log("votes_for:", proposal.votesFor);
+  console.log("votes_against:", proposal.votesAgainst);
+  console.log("votes_abstain:", proposal.votesAbstain);
+  console.log("judge_approve:", proposal.judgeApprove);
+  console.log("judge_reject:", proposal.judgeReject);
+  console.log("judge_needs:", proposal.judgeNeeds);
+  console.log("final_verdict:", proposal.finalVerdict);
+  console.log("proposal_text:", proposal.proposalText);
+  console.log("action_request:", actionPda.toBase58());
+  if (action) {
+    console.log("action_status:", action.status);
+    console.log("action_amount_lamports:", action.amountLamports);
+    console.log("action_recipient:", action.recipient.toBase58());
+    console.log("action_executor:", action.executor.toBase58());
+  } else {
+    console.log("action_status: not_found");
+  }
+  console.log("treasury_vault:", vaultPda.toBase58());
+  console.log("treasury_vault_lamports:", vaultLamports);
 }
