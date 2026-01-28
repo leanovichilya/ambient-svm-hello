@@ -1,7 +1,6 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
-import { getMatchEscrowPda } from "./match";
 import { getArgOrExit, usage } from "./utils";
 
 async function main() {
@@ -10,13 +9,11 @@ async function main() {
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const accountNs: any = (program as any).account;
   const m = await accountNs.match.fetch(matchPda);
-  const escrowPda = getMatchEscrowPda(program.programId, matchPda);
 
   await program.methods
     .executeMatch()
     .accounts({
       gameMatch: matchPda,
-      matchEscrow: escrowPda,
       playerA: m.playerA,
       playerB: m.playerB,
       executor: provider.wallet.publicKey,

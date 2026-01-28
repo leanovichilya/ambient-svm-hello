@@ -2,7 +2,7 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { ensureConfig, getConfigPda } from "./config";
+import { ensureConfig } from "./config";
 import { buildMatchPrompt } from "./prompts";
 import { fetchMatchState } from "./match";
 import {
@@ -76,7 +76,6 @@ async function main() {
   await program.methods
     .finalizeMatch(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
     .accounts({
-      config: getConfigPda(program.programId),
       gameMatch: matchPda,
       relayer,
     })

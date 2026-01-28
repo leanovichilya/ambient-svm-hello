@@ -2,9 +2,9 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { ensureConfig, getConfigPda } from "./config";
+import { ensureConfig } from "./config";
 import { buildMatchPrompt } from "./prompts";
-import { fetchMatchState, getMatchEscrowPda, getMatchPda, logMatchState } from "./match";
+import { fetchMatchState, getMatchPda, logMatchState } from "./match";
 import {
   getModelIdOrExit,
   logReceipt,
@@ -54,7 +54,6 @@ async function main() {
 
   const nonce = new anchor.BN(Date.now());
   const matchPda = getMatchPda(program.programId, playerA, nonce);
-  const escrowPda = getMatchEscrowPda(program.programId, matchPda);
 
   const criteria = "Pick the more concrete and feasible plan.";
   const inputA = "Plan A: deliver MVP in 2 weeks with a small scope and clear milestones.";
@@ -72,8 +71,6 @@ async function main() {
       nonce
     )
     .accounts({
-      gameMatch: matchPda,
-      matchEscrow: escrowPda,
       playerA,
       playerB: playerB.publicKey,
     })
@@ -111,7 +108,6 @@ async function main() {
   await program.methods
     .finalizeMatch(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
     .accounts({
-      config: getConfigPda(program.programId),
       gameMatch: matchPda,
       relayer: playerA,
     })
@@ -121,7 +117,6 @@ async function main() {
     .executeMatch()
     .accounts({
       gameMatch: matchPda,
-      matchEscrow: escrowPda,
       playerA,
       playerB: playerB.publicKey,
       executor: playerA,
