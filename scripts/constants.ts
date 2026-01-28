@@ -10,3 +10,5 @@ export const MAX_SUMMARY_WORDS = 60;
 export const MAX_SUMMARY_CHARS = 400;
 export const MAX_LIST_ITEMS = 5;
 export const MAX_LIST_ITEM_CHARS = 120;
+
+export const MATCH_STAKE_LAMPORTS = 1_000_000;
