@@ -398,7 +398,8 @@ pub mod ambient_svm_hello {
         let rent = Rent::get()?;
         let lamports = rent.minimum_balance(0);
         let bump = ctx.bumps.match_escrow;
-        let signer_seeds: &[&[u8]] = &[b"match_escrow", ctx.accounts.game_match.key().as_ref(), &[bump]];
+        let match_key = ctx.accounts.game_match.key();
+        let signer_seeds: &[&[u8]] = &[b"match_escrow", match_key.as_ref(), &[bump]];
         let signer = &[signer_seeds];
         let cpi_ctx = CpiContext::new_with_signer(
             ctx.accounts.system_program.to_account_info(),
@@ -489,7 +490,8 @@ pub mod ambient_svm_hello {
         require!(escrow_balance >= rent + total, ErrorCode::EscrowBalanceLow);
 
         let bump = ctx.bumps.match_escrow;
-        let signer_seeds: &[&[u8]] = &[b"match_escrow", m.key().as_ref(), &[bump]];
+        let match_key = m.key();
+        let signer_seeds: &[&[u8]] = &[b"match_escrow", match_key.as_ref(), &[bump]];
         let signer = &[signer_seeds];
 
         if m.verdict == 1 {
