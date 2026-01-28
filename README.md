@@ -62,3 +62,11 @@ yarn ts-node scripts/execute_match.ts <MATCH_PDA>
 ```bash
 yarn ts-node scripts/read_match.ts <MATCH_PDA>
 ```
+
+Example run (devnet, match demo)
+- Match PDA: 3k87py26qt54gknM1bULz35ka1rPRvGBhNePyivYcJPo
+- Verdict: 1 (A)
+- Receipt root: b839c92a8a940ed518735337e240cedc3fa20653b36bc2aa8c7858ea89e4843d
+- Prompt hash: 41994d7e18b253ddbf048efd8a5951af9aceb3d7fbe2fad0b8107bfc8a0a4b88
+- Model id: zai-org/GLM-4.6
+- Escrow PDA: 5S2w7ZJmEakLHB7zLdyzGaaBZ3G66GMhHA3t27wdJBFb
