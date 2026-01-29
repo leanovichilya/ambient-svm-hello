@@ -80,6 +80,38 @@ export async function submitMatchJudgeResult(
     .rpc();
 }
 
+export async function runJudgesAndSubmit(
+  program: any,
+  matchPda: anchor.web3.PublicKey,
+  judges: anchor.web3.Keypair[],
+  prompt: string,
+  promptHash: number[],
+  modelId: string,
+  apiKey: string,
+  onResult?: (index: number, verdict: number, receiptRootBytes: number[], receiptPresent: boolean) => void
+) {
+  for (let i = 0; i < judges.length; i += 1) {
+    const judge = judges[i];
+    const { verdict, receiptRootBytes, receiptPresent } = await getAmbientJudgeResult(
+      prompt,
+      modelId,
+      apiKey
+    );
+    await submitMatchJudgeResult(
+      program,
+      matchPda,
+      judge,
+      verdict,
+      receiptRootBytes,
+      promptHash,
+      modelId
+    );
+    if (onResult) {
+      onResult(i, verdict, receiptRootBytes, receiptPresent);
+    }
+  }
+}
+
 export async function getAmbientJudgeResult(
   prompt: string,
   modelId: string,

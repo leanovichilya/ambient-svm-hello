@@ -14,8 +14,7 @@ import {
 import {
   fundKeypairs,
   fundWallet,
-  getAmbientJudgeResult,
-  submitMatchJudgeResult,
+  runJudgesAndSubmit,
   waitForExecuteSlot,
 } from "./match_helpers";
 import {
@@ -98,26 +97,19 @@ async function main() {
   });
 
   const promptHash = sha256Bytes(prompt);
-  for (let i = 0; i < judges.length; i += 1) {
-    const { verdict, receiptRootBytes, receiptPresent } = await getAmbientJudgeResult(
-      prompt,
-      MODEL_ID,
-      AMBIENT_API_KEY
-    );
-    const judge = judges[i];
-    await submitMatchJudgeResult(
-      program as any,
-      matchPda,
-      judge,
-      verdict,
-      receiptRootBytes,
-      promptHash,
-      MODEL_ID
-    );
-
-    console.log(`judge_${i + 1}_verdict:`, verdict);
-    logReceipt(`judge_${i + 1}`, receiptPresent, receiptRootBytes);
-  }
+  await runJudgesAndSubmit(
+    program as any,
+    matchPda,
+    judges,
+    prompt,
+    promptHash,
+    MODEL_ID,
+    AMBIENT_API_KEY,
+    (index, verdict, receiptRootBytes, receiptPresent) => {
+      console.log(`judge_${index + 1}_verdict:`, verdict);
+      logReceipt(`judge_${index + 1}`, receiptPresent, receiptRootBytes);
+    }
+  );
 
   await program.methods
     .finalizeMatch()

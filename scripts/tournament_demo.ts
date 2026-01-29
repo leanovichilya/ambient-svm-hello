@@ -14,12 +14,7 @@ import {
   requireEnv,
   sha256Bytes,
 } from "./utils";
-import {
-  fundKeypairs,
-  getAmbientJudgeResult,
-  submitMatchJudgeResult,
-  waitForExecuteSlot,
-} from "./match_helpers";
+import { fundKeypairs, runJudgesAndSubmit, waitForExecuteSlot } from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
@@ -100,22 +95,15 @@ async function runMatch(
   const judges = Array.from({ length: JUDGES }, () => anchor.web3.Keypair.generate());
   await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
 
-  for (const judge of judges) {
-    const { verdict, receiptRootBytes } = await getAmbientJudgeResult(
-      prompt,
-      modelId,
-      ambientApiKey
-    );
-    await submitMatchJudgeResult(
-      program as any,
-      matchPda,
-      judge,
-      verdict,
-      receiptRootBytes,
-      promptHash,
-      modelId
-    );
-  }
+  await runJudgesAndSubmit(
+    program as any,
+    matchPda,
+    judges,
+    prompt,
+    promptHash,
+    modelId,
+    ambientApiKey
+  );
 
   await (program as any).methods
     .finalizeMatch()
@@ -187,8 +175,12 @@ async function main() {
     return;
   }
 
-  const winner1 = anchor.web3.Keypair.fromSecretKey(players.find((p) => p.publicKey.equals(semi1.winner))!.secretKey);
-  const winner2 = anchor.web3.Keypair.fromSecretKey(players.find((p) => p.publicKey.equals(semi2.winner))!.secretKey);
+  const winner1 = players.find((p) => p.publicKey.equals(semi1.winner));
+  const winner2 = players.find((p) => p.publicKey.equals(semi2.winner));
+  if (!winner1 || !winner2) {
+    console.error("Could not resolve semifinal winners");
+    process.exit(1);
+  }
   const finalMatch = await runMatch(
     program as any,
     winner1,
