@@ -1,28 +1,24 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
+import { fetchMatchState } from "./match";
 import { getArgOrExit, usage } from "./utils";
+import { getExecuteAfterSlot, getJudgeKeys } from "./match_helpers";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("execute_match.ts", "<MATCH_PDA>"));
   const { provider, program } = getProgram();
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
-  const accountNs: any = (program as any).account;
-  const m = await accountNs.match.fetch(matchPda);
-  const executeAfterRaw = m.executeAfterSlot;
-  const executeAfter =
-    typeof executeAfterRaw?.toNumber === "function"
-      ? executeAfterRaw.toNumber()
-      : Number(executeAfterRaw ?? 0);
+  const state = await fetchMatchState(program as any, matchPda);
+  const m = state.match;
+  const executeAfter = getExecuteAfterSlot(m);
   const slot = await program.provider.connection.getSlot();
   if (executeAfter > slot) {
     console.error(`Challenge period active. execute_after_slot=${executeAfter}`);
     process.exit(1);
   }
 
-  const judgeKeys = (m.judgeKeys as anchor.web3.PublicKey[]).map((k) =>
-    k && !k.equals(anchor.web3.PublicKey.default) ? k : provider.wallet.publicKey
-  );
+  const judgeKeys = getJudgeKeys(m, provider.wallet.publicKey);
   await program.methods
     .executeMatch()
     .accounts({

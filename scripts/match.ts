@@ -62,7 +62,8 @@ export async function fetchMatchState(
 
 export function logMatchState(
   matchPda: anchor.web3.PublicKey,
-  state: { match: any; escrowPda: anchor.web3.PublicKey; escrowLamports: number }
+  state: { match: any; escrowPda: anchor.web3.PublicKey; escrowLamports: number },
+  mode: "short" | "full" = "full"
 ): void {
   const { match, escrowPda, escrowLamports } = state;
   console.log("match:", matchPda.toBase58());
@@ -75,6 +76,14 @@ export function logMatchState(
   console.log("prompt_hash:", Buffer.from(match.promptHash).toString("hex"));
   console.log("receipt_root:", Buffer.from(match.receiptRoot).toString("hex"));
   console.log("model_id:", match.modelId);
+  console.log("executor:", match.executor.toBase58());
+  console.log("escrow:", escrowPda.toBase58());
+  console.log("escrow_lamports:", escrowLamports);
+
+  if (mode === "short") {
+    return;
+  }
+
   console.log("criteria:", match.criteria);
   console.log("input_a:", match.inputA);
   console.log("input_b:", match.inputB);
@@ -90,7 +99,4 @@ export function logMatchState(
   console.log("judge_b:", match.judgeB);
   console.log("judge_tie:", match.judgeTie);
   console.log("judge_count:", match.judgeCount);
-  console.log("executor:", match.executor.toBase58());
-  console.log("escrow:", escrowPda.toBase58());
-  console.log("escrow_lamports:", escrowLamports);
 }

@@ -14,7 +14,12 @@ import {
   requireEnv,
   sha256Bytes,
 } from "./utils";
-import { fundKeypairs, getAmbientJudgeResult, waitForExecuteSlot } from "./match_helpers";
+import {
+  fundKeypairs,
+  getAmbientJudgeResult,
+  submitMatchJudgeResult,
+  waitForExecuteSlot,
+} from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
@@ -101,14 +106,15 @@ async function runMatch(
       modelId,
       ambientApiKey
     );
-    await (program as any).methods
-      .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, modelId)
-      .accounts({
-        gameMatch: matchPda,
-        judge: judge.publicKey,
-      })
-      .signers([judge])
-      .rpc();
+    await submitMatchJudgeResult(
+      program as any,
+      matchPda,
+      judge,
+      verdict,
+      receiptRootBytes,
+      promptHash,
+      modelId
+    );
   }
 
   await (program as any).methods

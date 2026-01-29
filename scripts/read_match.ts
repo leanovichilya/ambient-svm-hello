@@ -6,10 +6,12 @@ import { getArgOrExit, usage } from "./utils";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("read_match.ts", "<MATCH_PDA>"));
+  const flag = process.argv[3];
+  const mode = flag === "--short" || flag === "-s" ? "short" : "full";
   const { program } = getProgram();
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const state = await fetchMatchState(program as any, matchPda);
-  logMatchState(matchPda, state);
+  logMatchState(matchPda, state, mode);
 }
 
 main().catch((e) => {

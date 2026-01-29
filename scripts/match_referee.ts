@@ -11,7 +11,12 @@ import {
   usage,
 } from "./utils";
 import { JUDGE_LAMPORTS } from "./constants";
-import { buildPromptFromMatch, fundWallet, getAmbientJudgeResult } from "./match_helpers";
+import {
+  buildPromptFromMatch,
+  fundWallet,
+  getAmbientJudgeResult,
+  submitMatchJudgeResult,
+} from "./match_helpers";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("match_referee.ts", "<MATCH_PDA>"));
@@ -45,14 +50,15 @@ async function main() {
   );
   const judge = anchor.web3.Keypair.generate();
   await fundWallet(provider, judge.publicKey, JUDGE_LAMPORTS);
-  await program.methods
-    .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
-    .accounts({
-      gameMatch: matchPda,
-      judge: judge.publicKey,
-    })
-    .signers([judge])
-    .rpc();
+  await submitMatchJudgeResult(
+    program as any,
+    matchPda,
+    judge,
+    verdict,
+    receiptRootBytes,
+    promptHash,
+    MODEL_ID
+  );
 
   console.log("match:", matchPda.toBase58());
   console.log("verdict:", verdict);

@@ -48,6 +48,38 @@ export function buildPromptFromMatch(match: any): string {
   });
 }
 
+export function getExecuteAfterSlot(match: any): number {
+  const raw = match.executeAfterSlot;
+  return typeof raw?.toNumber === "function" ? raw.toNumber() : Number(raw ?? 0);
+}
+
+export function getJudgeKeys(
+  match: any,
+  fallback: anchor.web3.PublicKey
+): anchor.web3.PublicKey[] {
+  const keys = (match.judgeKeys as anchor.web3.PublicKey[]) || [];
+  return keys.map((k) => (k && !k.equals(anchor.web3.PublicKey.default) ? k : fallback));
+}
+
+export async function submitMatchJudgeResult(
+  program: any,
+  matchPda: anchor.web3.PublicKey,
+  judge: anchor.web3.Keypair,
+  verdict: number,
+  receiptRootBytes: number[],
+  promptHash: number[],
+  modelId: string
+) {
+  await program.methods
+    .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, modelId)
+    .accounts({
+      gameMatch: matchPda,
+      judge: judge.publicKey,
+    })
+    .signers([judge])
+    .rpc();
+}
+
 export async function getAmbientJudgeResult(
   prompt: string,
   modelId: string,

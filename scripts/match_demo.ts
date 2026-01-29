@@ -15,6 +15,7 @@ import {
   fundKeypairs,
   fundWallet,
   getAmbientJudgeResult,
+  submitMatchJudgeResult,
   waitForExecuteSlot,
 } from "./match_helpers";
 import {
@@ -104,14 +105,15 @@ async function main() {
       AMBIENT_API_KEY
     );
     const judge = judges[i];
-    await program.methods
-      .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
-      .accounts({
-        gameMatch: matchPda,
-        judge: judge.publicKey,
-      })
-      .signers([judge])
-      .rpc();
+    await submitMatchJudgeResult(
+      program as any,
+      matchPda,
+      judge,
+      verdict,
+      receiptRootBytes,
+      promptHash,
+      MODEL_ID
+    );
 
     console.log(`judge_${i + 1}_verdict:`, verdict);
     logReceipt(`judge_${i + 1}`, receiptPresent, receiptRootBytes);
