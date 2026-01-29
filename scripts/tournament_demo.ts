@@ -1,20 +1,20 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { randomBytes } from "crypto";
 import { writeFile } from "fs/promises";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
-import {
-  commitMatchInput,
-  fetchMatchState,
-  getMatchPda,
-} from "./match";
+import { fetchMatchState } from "./match";
 import {
   getModelIdOrExit,
   requireEnv,
   sha256Bytes,
 } from "./utils";
-import { fundKeypairs, runJudgesAndSubmit, waitForExecuteSlot } from "./match_helpers";
+import {
+  createMatchAndReveal,
+  finalizeAndExecuteMatch,
+  fundKeypairs,
+  runJudgesAndSubmit,
+} from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
@@ -39,48 +39,21 @@ async function runMatch(
   const provider = program.provider as anchor.AnchorProvider;
 
   const nonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
-  const matchPda = getMatchPda(program.programId, playerA.publicKey, nonce);
-
-  const saltA = randomBytes(16);
-  const saltB = randomBytes(16);
-  const commitA = commitMatchInput(inputA, saltA);
-  const commitB = commitMatchInput(inputB, saltB);
-
-  await (program as any).methods
-    .createMatch(
-      MATCH_TYPE,
-      criteria,
-      extra,
-      commitA as any,
-      commitB as any,
-      new anchor.BN(MATCH_STAKE_LAMPORTS),
-      new anchor.BN(MATCH_CHALLENGE_PERIOD_SLOTS),
-      nonce
-    )
-    .accounts({
-      playerA: playerA.publicKey,
-      playerB: playerB.publicKey,
-    })
-    .signers([playerA, playerB])
-    .rpc();
-
-  await (program as any).methods
-    .revealMatchInput(inputA, saltA)
-    .accounts({
-      gameMatch: matchPda,
-      player: playerA.publicKey,
-    })
-    .signers([playerA])
-    .rpc();
-
-  await (program as any).methods
-    .revealMatchInput(inputB, saltB)
-    .accounts({
-      gameMatch: matchPda,
-      player: playerB.publicKey,
-    })
-    .signers([playerB])
-    .rpc();
+  const { matchPda } = await createMatchAndReveal({
+    program: program as any,
+    matchType: MATCH_TYPE,
+    criteria,
+    extra,
+    inputA,
+    inputB,
+    stakeLamports: MATCH_STAKE_LAMPORTS,
+    challengeSlots: MATCH_CHALLENGE_PERIOD_SLOTS,
+    nonce,
+    playerA: playerA.publicKey,
+    playerB: playerB.publicKey,
+    signerA: playerA,
+    signerB: playerB,
+  });
 
   const prompt = buildMatchPrompt({
     matchType: MATCH_TYPE,
@@ -105,28 +78,15 @@ async function runMatch(
     ambientApiKey
   );
 
-  await (program as any).methods
-    .finalizeMatch()
-    .accounts({
-      gameMatch: matchPda,
-      finalizer: (program.provider as anchor.AnchorProvider).wallet.publicKey,
-    })
-    .rpc();
-
-  await waitForExecuteSlot(program, matchPda);
-
-  await (program as any).methods
-    .executeMatch()
-    .accounts({
-      gameMatch: matchPda,
-      playerA: playerA.publicKey,
-      playerB: playerB.publicKey,
-      judge0: judges[0].publicKey,
-      judge1: judges[1].publicKey,
-      judge2: judges[2].publicKey,
-      executor: provider.wallet.publicKey,
-    })
-    .rpc();
+  await finalizeAndExecuteMatch({
+    program: program as any,
+    matchPda,
+    playerA: playerA.publicKey,
+    playerB: playerB.publicKey,
+    judges: judges.map((j) => j.publicKey),
+    finalizer: (program.provider as anchor.AnchorProvider).wallet.publicKey,
+    executor: provider.wallet.publicKey,
+  });
 
   const state = await fetchMatchState(program as any, matchPda);
   const verdict = Number(state.match.verdict);

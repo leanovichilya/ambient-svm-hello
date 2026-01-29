@@ -1,10 +1,9 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { randomBytes } from "crypto";
 import { writeFile } from "fs/promises";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
-import { commitMatchInput, fetchMatchState, getMatchPda, logMatchState } from "./match";
+import { fetchMatchState, logMatchState } from "./match";
 import {
   getModelIdOrExit,
   logReceipt,
@@ -12,10 +11,11 @@ import {
   sha256Bytes,
 } from "./utils";
 import {
+  createMatchAndReveal,
+  finalizeAndExecuteMatch,
   fundKeypairs,
   fundWallet,
   runJudgesAndSubmit,
-  waitForExecuteSlot,
 } from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
@@ -41,51 +41,25 @@ async function main() {
   await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
 
   const nonce = new anchor.BN(Date.now());
-  const matchPda = getMatchPda(program.programId, playerA, nonce);
-
   const criteria = "Pick the more concrete and feasible plan.";
   const inputA = "Plan A: deliver MVP in 2 weeks with a small scope and clear milestones.";
   const inputB = "Plan B: deliver full product in 2 weeks with no timeline details.";
   const extra = "If insufficient info, return Tie.";
-  const saltA = randomBytes(16);
-  const saltB = randomBytes(16);
-  const commitA = commitMatchInput(inputA, saltA);
-  const commitB = commitMatchInput(inputB, saltB);
 
-  await program.methods
-    .createMatch(
-      MATCH_TYPE,
-      criteria,
-      extra,
-      commitA as any,
-      commitB as any,
-      new anchor.BN(MATCH_STAKE_LAMPORTS),
-      new anchor.BN(MATCH_CHALLENGE_PERIOD_SLOTS),
-      nonce
-    )
-    .accounts({
-      playerA,
-      playerB: playerB.publicKey,
-    })
-    .signers([playerB])
-    .rpc();
-
-  await program.methods
-    .revealMatchInput(inputA, saltA)
-    .accounts({
-      gameMatch: matchPda,
-      player: playerA,
-    })
-    .rpc();
-
-  await program.methods
-    .revealMatchInput(inputB, saltB)
-    .accounts({
-      gameMatch: matchPda,
-      player: playerB.publicKey,
-    })
-    .signers([playerB])
-    .rpc();
+  const { matchPda } = await createMatchAndReveal({
+    program,
+    matchType: MATCH_TYPE,
+    criteria,
+    extra,
+    inputA,
+    inputB,
+    stakeLamports: MATCH_STAKE_LAMPORTS,
+    challengeSlots: MATCH_CHALLENGE_PERIOD_SLOTS,
+    nonce,
+    playerA,
+    playerB: playerB.publicKey,
+    signerB: playerB,
+  });
 
   const prompt = buildMatchPrompt({
     matchType: MATCH_TYPE,
@@ -111,28 +85,15 @@ async function main() {
     }
   );
 
-  await program.methods
-    .finalizeMatch()
-    .accounts({
-      gameMatch: matchPda,
-      finalizer: playerA,
-    })
-    .rpc();
-
-  await waitForExecuteSlot(program, matchPda);
-
-  await program.methods
-    .executeMatch()
-    .accounts({
-      gameMatch: matchPda,
-      playerA,
-      playerB: playerB.publicKey,
-      judge0: judges[0].publicKey,
-      judge1: judges[1].publicKey,
-      judge2: judges[2].publicKey,
-      executor: playerA,
-    })
-    .rpc();
+  await finalizeAndExecuteMatch({
+    program,
+    matchPda,
+    playerA,
+    playerB: playerB.publicKey,
+    judges: judges.map((j) => j.publicKey),
+    finalizer: playerA,
+    executor: playerA,
+  });
 
   const state = await fetchMatchState(program as any, matchPda);
   console.log("final_verdict:", state.match.verdict);

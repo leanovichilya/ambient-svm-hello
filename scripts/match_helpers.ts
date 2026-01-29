@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
+import { randomBytes } from "crypto";
 import { AmbientApiError, callAmbient } from "./ambient";
-import { fetchMatchState } from "./match";
+import { commitMatchInput, fetchMatchState, getMatchPda } from "./match";
 import { buildMatchPrompt } from "./prompts";
 import { normalizeWinner, parseJsonBlock } from "./utils";
 
@@ -77,6 +78,119 @@ export async function submitMatchJudgeResult(
       judge: judge.publicKey,
     })
     .signers([judge])
+    .rpc();
+}
+
+export async function createMatchAndReveal(params: {
+  program: any;
+  matchType: number;
+  criteria: string;
+  extra: string;
+  inputA: string;
+  inputB: string;
+  stakeLamports: number;
+  challengeSlots: number;
+  nonce: anchor.BN;
+  playerA: anchor.web3.PublicKey;
+  playerB: anchor.web3.PublicKey;
+  signerA?: anchor.web3.Keypair;
+  signerB?: anchor.web3.Keypair;
+}): Promise<{ matchPda: anchor.web3.PublicKey; saltA: Buffer; saltB: Buffer }> {
+  const {
+    program,
+    matchType,
+    criteria,
+    extra,
+    inputA,
+    inputB,
+    stakeLamports,
+    challengeSlots,
+    nonce,
+    playerA,
+    playerB,
+    signerA,
+    signerB,
+  } = params;
+
+  const matchPda = getMatchPda(program.programId, playerA, nonce);
+  const saltA = randomBytes(16);
+  const saltB = randomBytes(16);
+  const commitA = commitMatchInput(inputA, saltA);
+  const commitB = commitMatchInput(inputB, saltB);
+  const signers: anchor.web3.Keypair[] = [];
+  if (signerA) signers.push(signerA);
+  if (signerB) signers.push(signerB);
+
+  await program.methods
+    .createMatch(
+      matchType,
+      criteria,
+      extra,
+      commitA as any,
+      commitB as any,
+      new anchor.BN(stakeLamports),
+      new anchor.BN(challengeSlots),
+      nonce
+    )
+    .accounts({
+      playerA,
+      playerB,
+    })
+    .signers(signers)
+    .rpc();
+
+  await program.methods
+    .revealMatchInput(inputA, saltA)
+    .accounts({
+      gameMatch: matchPda,
+      player: playerA,
+    })
+    .signers(signerA ? [signerA] : [])
+    .rpc();
+
+  await program.methods
+    .revealMatchInput(inputB, saltB)
+    .accounts({
+      gameMatch: matchPda,
+      player: playerB,
+    })
+    .signers(signerB ? [signerB] : [])
+    .rpc();
+
+  return { matchPda, saltA, saltB };
+}
+
+export async function finalizeAndExecuteMatch(params: {
+  program: any;
+  matchPda: anchor.web3.PublicKey;
+  playerA: anchor.web3.PublicKey;
+  playerB: anchor.web3.PublicKey;
+  judges: anchor.web3.PublicKey[];
+  finalizer: anchor.web3.PublicKey;
+  executor: anchor.web3.PublicKey;
+}) {
+  const { program, matchPda, playerA, playerB, judges, finalizer, executor } = params;
+  await program.methods
+    .finalizeMatch()
+    .accounts({
+      gameMatch: matchPda,
+      finalizer,
+    })
+    .rpc();
+
+  await waitForExecuteSlot(program, matchPda);
+
+  await program.methods
+    .executeMatch()
+    .accounts({
+      gameMatch: matchPda,
+      playerA,
+      playerB,
+      judge0: judges[0],
+      judge1: judges[1],
+      judge2: judges[2],
+      executor,
+    })
     .rpc();
 }
 
