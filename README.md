@@ -8,9 +8,49 @@ Emergent behavior: provably fair economic agents enabled by verified inference +
 - Anchor CLI installed
 - Node.js 18+ with Yarn (corepack or global yarn)
 
-Install deps:
-```bash
-yarn install
+## Menu options (scripts/menu.sh)
+```
+0) Install dependencies (apt + yarn)
+   - Commands:
+     ```bash
+     sudo apt update
+     sudo apt install -y curl build-essential pkg-config libssl-dev
+     corepack enable
+     cp .env.example .env
+     yarn install
+     ```
+1) Run match demo
+   - Command:
+     ```bash
+     yarn ts-node scripts/match_demo.ts
+     ```
+2) Run tournament demo
+   - Command:
+     ```bash
+     yarn ts-node scripts/tournament_demo.ts
+     ```
+3) Read match state (uses last_match_pda.txt if empty)
+   - Command:
+     ```bash
+     yarn ts-node scripts/read_match.ts <MATCH_PDA>
+     ```
+4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)
+   - Command:
+     ```bash
+     yarn ts-node scripts/verify_match_receipt.ts <MATCH_PDA>
+     ```
+5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)
+   - Command:
+     ```bash
+     solana balance <PUBKEY> --url https://api.devnet.solana.com
+     ```
+6) Build + deploy (after .env is set)
+   - Commands:
+     ```bash
+     anchor build
+     anchor deploy --no-idl
+     ```
+q) Quit
 ```
 
 ### Scenario
