@@ -1,7 +1,8 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "../anchor";
-import { fetchMatchState, logMatchState } from "./state";
+import { logMatchState } from "./log";
+import { fetchMatchState } from "./state";
 import { getArgOrExit, usage } from "../utils";
 
 async function main() {

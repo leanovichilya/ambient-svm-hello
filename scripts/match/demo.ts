@@ -2,13 +2,12 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { writeFile } from "fs/promises";
 import { getProgram } from "../anchor";
-import { buildMatchPrompt } from "../prompts";
-import { fetchMatchState, logMatchState } from "./state";
+import { fetchMatchState } from "./state";
+import { logMatchState } from "./log";
 import {
   getModelIdOrExit,
   logReceipt,
   requireEnv,
-  sha256Bytes,
 } from "../utils";
 import {
   createMatchAndReveal,
@@ -29,6 +28,7 @@ import {
   MATCH_STAKE_LAMPORTS,
   MATCH_TYPE,
 } from "./config";
+import { buildPromptAndHash } from "./prompt";
 
 async function main() {
   const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
@@ -64,7 +64,7 @@ async function main() {
     signerB: playerB,
   });
 
-  const prompt = buildMatchPrompt({
+  const { prompt, promptHash } = buildPromptAndHash({
     matchType: MATCH_TYPE,
     criteria,
     inputA,
@@ -72,8 +72,6 @@ async function main() {
     extra,
     stakeLamports: MATCH_STAKE_LAMPORTS,
   });
-
-  const promptHash = sha256Bytes(prompt);
   await runJudgesAndSubmit(
     program as any,
     matchPda,

@@ -1,6 +1,4 @@
 import * as anchor from "@coral-xyz/anchor";
-import { buildMatchPrompt } from "../prompts";
-import { sha256Bytes } from "../utils";
 import {
   MATCH_CHALLENGE_PERIOD_SLOTS,
   MATCH_JUDGES,
@@ -8,6 +6,7 @@ import {
   MATCH_TYPE,
   JUDGE_LAMPORTS,
 } from "./config";
+import { buildPromptAndHash } from "./prompt";
 import {
   createMatchAndReveal,
   finalizeAndExecuteMatch,
@@ -57,7 +56,7 @@ export async function runMatch(params: {
     signerB: playerB,
   });
 
-  const prompt = buildMatchPrompt({
+  const { prompt, promptHash } = buildPromptAndHash({
     matchType: MATCH_TYPE,
     criteria,
     inputA,
@@ -65,7 +64,6 @@ export async function runMatch(params: {
     extra,
     stakeLamports: MATCH_STAKE_LAMPORTS,
   });
-  const promptHash = sha256Bytes(prompt);
 
   const judges = Array.from({ length: MATCH_JUDGES }, () => anchor.web3.Keypair.generate());
   await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
