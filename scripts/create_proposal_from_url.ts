@@ -2,6 +2,7 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { createHash } from "crypto";
 import { getProgram } from "./anchor";
+import { ensureConfig } from "./config";
 import { fetchProposalFromUrl, ProposalDetails } from "./governance_sources";
 import { getArgOrExit, usage } from "./utils";
 
@@ -66,26 +67,6 @@ function buildCanonicalProposalText(
   }
   const truncatedBody = truncateUtf8ByBytes(body, remaining);
   return { text: truncBaseText + truncatedBody, truncated: true };
-}
-
-async function ensureConfig(
-  program: anchor.Program,
-  user: anchor.web3.PublicKey
-): Promise<anchor.web3.PublicKey> {
-  const [configPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("config")],
-    program.programId
-  );
-  const cfgInfo = await program.provider.connection.getAccountInfo(configPda);
-  if (!cfgInfo) {
-    await program.methods
-      .initConfig(user)
-      .accounts({
-        admin: user,
-      })
-      .rpc();
-  }
-  return configPda;
 }
 
 async function main() {

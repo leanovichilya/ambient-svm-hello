@@ -45,6 +45,14 @@ export function normalizeVerdict(raw: string): number {
   throw new Error(`Unknown verdict value: ${raw}`);
 }
 
+export function normalizeWinner(raw: string): number {
+  const v = raw.trim().toLowerCase();
+  if (v === "a" || v === "input a" || v === "option a") return 1;
+  if (v === "b" || v === "input b" || v === "option b") return 2;
+  if (v === "tie" || v === "draw" || v === "equal") return 3;
+  throw new Error(`Unknown winner value: ${raw}`);
+}
+
 export function usage(script: string, args: string): string {
   return `Usage: yarn ts-node scripts/${script} ${args}`;
 }

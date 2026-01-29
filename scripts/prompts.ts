@@ -61,3 +61,50 @@ export function buildJudgePrompt(
     proposalText,
   ].join("\n");
 }
+
+export function buildMatchPrompt(params: {
+  matchType: number;
+  criteria: string;
+  inputA: string;
+  inputB: string;
+  extra: string;
+  stakeLamports: number;
+}): string {
+  const matchType =
+    params.matchType === 1
+      ? "contest"
+      : params.matchType === 2
+      ? "auction"
+      : params.matchType === 3
+      ? "simulation"
+      : "unknown";
+  return [
+    "You are an AI referee. Decide the winner based on the rules and inputs.",
+    "Return JSON only, with no extra text or markdown.",
+    "",
+    "Schema:",
+    "{",
+    "\"winner\": \"A\" | \"B\" | \"Tie\",",
+    "\"reason\": \"1-3 sentences\"",
+    "}",
+    "",
+    "Rules:",
+    "Do not invent facts.",
+    "If information is insufficient, choose Tie.",
+    "",
+    `Match type: ${matchType}`,
+    `Stake (lamports): ${params.stakeLamports}`,
+    "",
+    "Criteria:",
+    params.criteria,
+    "",
+    "Input A:",
+    params.inputA,
+    "",
+    "Input B:",
+    params.inputB,
+    "",
+    "Extra context:",
+    params.extra,
+  ].join("\n");
+}

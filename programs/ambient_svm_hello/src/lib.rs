@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
+use sha2::{Digest, Sha256};
 
 
 declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
@@ -13,6 +14,11 @@ const MAX_PROPOSAL_ID_LEN: usize = 128;
 const MAX_GOV_PROPOSAL_TEXT_LEN: usize = 512;
 const MAX_REVISION_TEXT_LEN: usize = 512;
 const ACTION_LAMPORTS: u64 = 1_000_000;
+const MAX_MATCH_EXTRA_LEN: usize = 512;
+const MAX_MATCH_SALT_LEN: usize = 64;
+const MATCH_REVEAL_WINDOW_SECS: i64 = 600;
+const MAX_MATCH_CHALLENGE_PERIOD_SLOTS: u64 = 3600;
+const JUDGE_BOND_LAMPORTS: u64 = 1_000_000;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -359,6 +365,355 @@ pub mod ambient_svm_hello {
 
         Ok(())
     }
+
+    pub fn create_match(
+        ctx: Context<CreateMatch>,
+        match_type: u8,
+        criteria: String,
+        extra: String,
+        commit_a: [u8; 32],
+        commit_b: [u8; 32],
+        stake_lamports: u64,
+        challenge_period_slots: u64,
+        nonce: u64,
+    ) -> Result<()> {
+        require!(match_type >= 1 && match_type <= 3, ErrorCode::BadMatchType);
+        require!(
+            challenge_period_slots > 0
+                && challenge_period_slots <= MAX_MATCH_CHALLENGE_PERIOD_SLOTS,
+            ErrorCode::BadChallengePeriod
+        );
+        require!(
+            criteria.as_bytes().len() <= MAX_CRITERIA_LEN,
+            ErrorCode::MatchTextTooLong
+        );
+        require!(
+            extra.as_bytes().len() <= MAX_MATCH_EXTRA_LEN,
+            ErrorCode::MatchTextTooLong
+        );
+        require!(stake_lamports > 0, ErrorCode::BadStake);
+        require_keys_neq!(
+            ctx.accounts.player_a.key(),
+            ctx.accounts.player_b.key(),
+            ErrorCode::BadMatchPlayer
+        );
+
+        let rent = Rent::get()?;
+        let lamports = rent.minimum_balance(0);
+        let bump = ctx.bumps.match_escrow;
+        let match_key = ctx.accounts.game_match.key();
+        let signer_seeds: &[&[u8]] = &[b"match_escrow", match_key.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::CreateAccount {
+                from: ctx.accounts.player_a.to_account_info(),
+                to: ctx.accounts.match_escrow.to_account_info(),
+            },
+            signer,
+        );
+        system_program::create_account(cpi_ctx, lamports, 0, &system_program::ID)?;
+
+        let cpi_ctx_a = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.player_a.to_account_info(),
+                to: ctx.accounts.match_escrow.to_account_info(),
+            },
+        );
+        system_program::transfer(cpi_ctx_a, stake_lamports)?;
+
+        let cpi_ctx_b = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.player_b.to_account_info(),
+                to: ctx.accounts.match_escrow.to_account_info(),
+            },
+        );
+        system_program::transfer(cpi_ctx_b, stake_lamports)?;
+
+        let now = Clock::get()?.unix_timestamp;
+        let m = &mut ctx.accounts.game_match;
+        m.player_a = ctx.accounts.player_a.key();
+        m.player_b = ctx.accounts.player_b.key();
+        m.status = 0;
+        m.nonce = nonce;
+        m.match_type = match_type;
+        m.stake_lamports = stake_lamports;
+        m.verdict = 0;
+        m.prompt_hash = [0u8; 32];
+        m.receipt_root = [0u8; 32];
+        m.model_id = String::new();
+        m.criteria = criteria;
+        m.input_a = String::new();
+        m.input_b = String::new();
+        m.extra = extra;
+        m.executor = Pubkey::default();
+        m.commit_a = commit_a;
+        m.commit_b = commit_b;
+        m.revealed_a = 0;
+        m.revealed_b = 0;
+        m.reveal_deadline = now + MATCH_REVEAL_WINDOW_SECS;
+        m.finalized_slot = 0;
+        m.execute_after_slot = 0;
+        m.judge_a = 0;
+        m.judge_b = 0;
+        m.judge_tie = 0;
+        m.challenge_period_slots = challenge_period_slots;
+        m.judge_keys = [Pubkey::default(); 3];
+        m.judge_verdicts = [0u8; 3];
+        m.judge_count = 0;
+
+        Ok(())
+    }
+
+    pub fn reveal_match_input(
+        ctx: Context<RevealMatchInput>,
+        input: String,
+        salt: Vec<u8>,
+    ) -> Result<()> {
+        require!(
+            input.as_bytes().len() <= MAX_INPUT_LEN,
+            ErrorCode::MatchTextTooLong
+        );
+        require!(salt.len() <= MAX_MATCH_SALT_LEN, ErrorCode::SaltTooLong);
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
+        let now = Clock::get()?.unix_timestamp;
+        require!(now <= m.reveal_deadline, ErrorCode::RevealWindowExpired);
+        let player = ctx.accounts.player.key();
+        let mut hasher = Sha256::new();
+        hasher.update(b"match");
+        hasher.update(input.as_bytes());
+        hasher.update(salt.as_slice());
+        let commit: [u8; 32] = hasher.finalize().into();
+
+        if player == m.player_a {
+            require!(m.revealed_a == 0, ErrorCode::AlreadyRevealed);
+            require!(commit == m.commit_a, ErrorCode::BadCommitment);
+            m.input_a = input;
+            m.revealed_a = 1;
+        } else if player == m.player_b {
+            require!(m.revealed_b == 0, ErrorCode::AlreadyRevealed);
+            require!(commit == m.commit_b, ErrorCode::BadCommitment);
+            m.input_b = input;
+            m.revealed_b = 1;
+        } else {
+            return err!(ErrorCode::BadMatchPlayer);
+        }
+        Ok(())
+    }
+
+    pub fn submit_match_judge_result(
+        ctx: Context<SubmitMatchJudgeResult>,
+        verdict: u8,
+        receipt_root: [u8; 32],
+        prompt_hash: [u8; 32],
+        model_id: String,
+    ) -> Result<()> {
+        require!(verdict >= 1 && verdict <= 3, ErrorCode::BadMatchVerdict);
+        require!(
+            model_id.as_bytes().len() <= MAX_MODEL_ID_LEN,
+            ErrorCode::ModelIdTooLong
+        );
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
+        require!(m.revealed_a == 1 && m.revealed_b == 1, ErrorCode::MatchNotRevealed);
+        let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
+        require!(total < 3, ErrorCode::TooManyJudges);
+        require!(m.judge_count < 3, ErrorCode::TooManyJudges);
+
+        if verdict == 1 {
+            m.judge_a = m.judge_a.saturating_add(1);
+        } else if verdict == 2 {
+            m.judge_b = m.judge_b.saturating_add(1);
+        } else {
+            m.judge_tie = m.judge_tie.saturating_add(1);
+        }
+
+        let idx = m.judge_count as usize;
+        m.judge_keys[idx] = ctx.accounts.judge.key();
+        m.judge_verdicts[idx] = verdict;
+        m.judge_count = m.judge_count.saturating_add(1);
+
+        m.prompt_hash = prompt_hash;
+        m.receipt_root = receipt_root;
+        m.model_id = model_id.clone();
+
+        let r = &mut ctx.accounts.match_judge;
+        r.match_key = m.key();
+        r.judge = ctx.accounts.judge.key();
+        r.verdict = verdict;
+        r.receipt_root = receipt_root;
+        r.prompt_hash = prompt_hash;
+        r.model_id = model_id;
+
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.judge.to_account_info(),
+                to: ctx.accounts.match_escrow.to_account_info(),
+            },
+        );
+        system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+
+        Ok(())
+    }
+
+    pub fn finalize_match(ctx: Context<FinalizeMatch>) -> Result<()> {
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
+        let now = Clock::get()?.unix_timestamp;
+
+        let verdict = if m.revealed_a == 1 && m.revealed_b == 1 {
+            let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
+            require!(total == 3, ErrorCode::NotEnoughJudges);
+            if m.judge_a >= 2 {
+                1
+            } else if m.judge_b >= 2 {
+                2
+            } else {
+                3
+            }
+        } else {
+            require!(now > m.reveal_deadline, ErrorCode::RevealWindowActive);
+            if m.revealed_a == 1 && m.revealed_b == 0 {
+                1
+            } else if m.revealed_b == 1 && m.revealed_a == 0 {
+                2
+            } else {
+                3
+            }
+        };
+
+        m.verdict = verdict;
+        m.status = 1;
+        let slot = Clock::get()?.slot;
+        m.finalized_slot = slot;
+        m.execute_after_slot = slot + m.challenge_period_slots;
+
+        Ok(())
+    }
+
+    pub fn execute_match(ctx: Context<ExecuteMatch>) -> Result<()> {
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 1, ErrorCode::MatchNotFinalized);
+        let slot = Clock::get()?.slot;
+        require!(slot >= m.execute_after_slot, ErrorCode::ChallengePeriodActive);
+        require_keys_eq!(m.player_a, ctx.accounts.player_a.key(), ErrorCode::BadMatchPlayer);
+        require_keys_eq!(m.player_b, ctx.accounts.player_b.key(), ErrorCode::BadMatchPlayer);
+
+        let rent = Rent::get()?.minimum_balance(0);
+        let total = m.stake_lamports.checked_mul(2).unwrap();
+        let escrow_balance = ctx.accounts.match_escrow.lamports();
+        let bond_total = JUDGE_BOND_LAMPORTS.saturating_mul(m.judge_count as u64);
+        require!(
+            escrow_balance >= rent + total + bond_total,
+            ErrorCode::EscrowBalanceLow
+        );
+
+        let bump = ctx.bumps.match_escrow;
+        let match_key = m.key();
+        let signer_seeds: &[&[u8]] = &[b"match_escrow", match_key.as_ref(), &[bump]];
+        let signer = &[signer_seeds];
+
+        if m.verdict == 1 {
+            let cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.match_escrow.to_account_info(),
+                    to: ctx.accounts.player_a.to_account_info(),
+                },
+                signer,
+            );
+            system_program::transfer(cpi_ctx, total)?;
+        } else if m.verdict == 2 {
+            let cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.match_escrow.to_account_info(),
+                    to: ctx.accounts.player_b.to_account_info(),
+                },
+                signer,
+            );
+            system_program::transfer(cpi_ctx, total)?;
+        } else {
+            let cpi_ctx_a = CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.match_escrow.to_account_info(),
+                    to: ctx.accounts.player_a.to_account_info(),
+                },
+                signer,
+            );
+            system_program::transfer(cpi_ctx_a, m.stake_lamports)?;
+            let cpi_ctx_b = CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.match_escrow.to_account_info(),
+                    to: ctx.accounts.player_b.to_account_info(),
+                },
+                signer,
+            );
+            system_program::transfer(cpi_ctx_b, m.stake_lamports)?;
+        }
+
+        if m.judge_count > 0 {
+            let judge_ais = [
+                ctx.accounts.judge_0.to_account_info(),
+                ctx.accounts.judge_1.to_account_info(),
+                ctx.accounts.judge_2.to_account_info(),
+            ];
+            for i in 0..m.judge_count as usize {
+                let judge_ai = &judge_ais[i];
+                require_keys_eq!(
+                    m.judge_keys[i],
+                    judge_ai.key(),
+                    ErrorCode::BadJudgeAccount
+                );
+                require!(
+                    judge_ai.owner == &system_program::ID,
+                    ErrorCode::BadJudgeAccount
+                );
+                if m.verdict == 3 || m.judge_verdicts[i] == m.verdict {
+                    let cpi_ctx = CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.match_escrow.to_account_info(),
+                            to: judge_ai.clone(),
+                        },
+                        signer,
+                    );
+                    system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+                } else if m.verdict == 1 {
+                    let cpi_ctx = CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.match_escrow.to_account_info(),
+                            to: ctx.accounts.player_a.to_account_info(),
+                        },
+                        signer,
+                    );
+                    system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+                } else {
+                    let cpi_ctx = CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.match_escrow.to_account_info(),
+                            to: ctx.accounts.player_b.to_account_info(),
+                        },
+                        signer,
+                    );
+                    system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+                }
+            }
+        }
+
+        m.status = 2;
+        m.executor = ctx.accounts.executor.key();
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -606,6 +961,96 @@ pub struct CompleteAction<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(match_type: u8, criteria: String, extra: String, commit_a: [u8; 32], commit_b: [u8; 32], stake_lamports: u64, challenge_period_secs: i64, nonce: u64)]
+pub struct CreateMatch<'info> {
+    #[account(
+        init,
+        payer = player_a,
+        space = Match::space(),
+        seeds = [b"match", player_a.key().as_ref(), &nonce.to_le_bytes()],
+        bump
+    )]
+    pub game_match: Account<'info, Match>,
+    #[account(
+        mut,
+        seeds = [b"match_escrow", game_match.key().as_ref()],
+        bump
+    )]
+    /// CHECK: PDA system account created via create_account; no data is stored.
+    pub match_escrow: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub player_a: Signer<'info>,
+    #[account(mut)]
+    pub player_b: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RevealMatchInput<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    #[account(mut)]
+    pub player: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SubmitMatchJudgeResult<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    #[account(
+        mut,
+        seeds = [b"match_escrow", game_match.key().as_ref()],
+        bump
+    )]
+    /// CHECK: PDA system account created via create_account; no data is stored.
+    pub match_escrow: UncheckedAccount<'info>,
+    #[account(
+        init,
+        payer = judge,
+        space = MatchJudgeResult::space(),
+        seeds = [b"match_judge", game_match.key().as_ref(), judge.key().as_ref()],
+        bump
+    )]
+    pub match_judge: Account<'info, MatchJudgeResult>,
+    #[account(mut)]
+    pub judge: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FinalizeMatch<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    pub finalizer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteMatch<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    #[account(
+        mut,
+        seeds = [b"match_escrow", game_match.key().as_ref()],
+        bump
+    )]
+    /// CHECK: PDA system account created via create_account; no data is stored.
+    pub match_escrow: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub player_a: SystemAccount<'info>,
+    #[account(mut)]
+    pub player_b: SystemAccount<'info>,
+    #[account(mut)]
+    pub judge_0: SystemAccount<'info>,
+    #[account(mut)]
+    pub judge_1: SystemAccount<'info>,
+    #[account(mut)]
+    pub judge_2: SystemAccount<'info>,
+    #[account(mut)]
+    pub executor: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct InitTreasuryVault<'info> {
     #[account(
         mut,
@@ -804,6 +1249,96 @@ impl ActionRequest {
     }
 }
 
+#[account]
+pub struct Match {
+    pub player_a: Pubkey,
+    pub player_b: Pubkey,
+    pub status: u8,
+    pub nonce: u64,
+    pub match_type: u8,
+    pub stake_lamports: u64,
+    pub verdict: u8,
+    pub prompt_hash: [u8; 32],
+    pub receipt_root: [u8; 32],
+    pub model_id: String,
+    pub criteria: String,
+    pub input_a: String,
+    pub input_b: String,
+    pub extra: String,
+    pub executor: Pubkey,
+    pub commit_a: [u8; 32],
+    pub commit_b: [u8; 32],
+    pub revealed_a: u8,
+    pub revealed_b: u8,
+    pub reveal_deadline: i64,
+    pub finalized_slot: u64,
+    pub execute_after_slot: u64,
+    pub judge_a: u8,
+    pub judge_b: u8,
+    pub judge_tie: u8,
+    pub challenge_period_slots: u64,
+    pub judge_keys: [Pubkey; 3],
+    pub judge_verdicts: [u8; 3],
+    pub judge_count: u8,
+}
+
+impl Match {
+    pub fn space() -> usize {
+        8
+        + 32
+        + 32
+        + 1
+        + 8
+        + 1
+        + 8
+        + 1
+        + 32
+        + 32
+        + 4 + MAX_MODEL_ID_LEN
+        + 4 + MAX_CRITERIA_LEN
+        + 4 + MAX_INPUT_LEN
+        + 4 + MAX_INPUT_LEN
+        + 4 + MAX_MATCH_EXTRA_LEN
+        + 32
+        + 32
+        + 32
+        + 1
+        + 1
+        + 8
+        + 8
+        + 8
+        + 1
+        + 1
+        + 1
+        + 8
+        + 32 * 3
+        + 1 * 3
+        + 1
+    }
+}
+
+#[account]
+pub struct MatchJudgeResult {
+    pub match_key: Pubkey,
+    pub judge: Pubkey,
+    pub verdict: u8,
+    pub receipt_root: [u8; 32],
+    pub prompt_hash: [u8; 32],
+    pub model_id: String,
+}
+
+impl MatchJudgeResult {
+    pub fn space() -> usize {
+        8
+        + 32
+        + 32
+        + 1
+        + 32
+        + 32
+        + 4 + MAX_MODEL_ID_LEN
+    }
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("Criteria too long")]
@@ -848,4 +1383,40 @@ pub enum ErrorCode {
     BadRecipient,
     #[msg("Not authority")]
     NotAuthority,
+    #[msg("Bad match type")]
+    BadMatchType,
+    #[msg("Match text too long")]
+    MatchTextTooLong,
+    #[msg("Bad stake amount")]
+    BadStake,
+    #[msg("Match already finalized")]
+    MatchAlreadyFinalized,
+    #[msg("Match not finalized")]
+    MatchNotFinalized,
+    #[msg("Match not revealed")]
+    MatchNotRevealed,
+    #[msg("Bad match verdict")]
+    BadMatchVerdict,
+    #[msg("Bad match player")]
+    BadMatchPlayer,
+    #[msg("Escrow balance too low")]
+    EscrowBalanceLow,
+    #[msg("Bad challenge period")]
+    BadChallengePeriod,
+    #[msg("Reveal window still active")]
+    RevealWindowActive,
+    #[msg("Missing judge accounts")]
+    MissingJudgeAccounts,
+    #[msg("Bad judge account")]
+    BadJudgeAccount,
+    #[msg("Bad commitment")]
+    BadCommitment,
+    #[msg("Reveal window expired")]
+    RevealWindowExpired,
+    #[msg("Already revealed")]
+    AlreadyRevealed,
+    #[msg("Salt too long")]
+    SaltTooLong,
+    #[msg("Challenge period active")]
+    ChallengePeriodActive,
 }

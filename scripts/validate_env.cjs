@@ -1,11 +1,11 @@
-import "dotenv/config";
+require("dotenv/config");
 
 function main() {
   const args = new Set(process.argv.slice(2));
   const requireTally = args.has("--require-tally");
   const requireAmbient = args.has("--require-ambient") || !args.has("--skip-ambient");
 
-  const missing: string[] = [];
+  const missing = [];
 
   if (requireAmbient && !process.env.AMBIENT_API_KEY) {
     missing.push("AMBIENT_API_KEY");

@@ -1,163 +1,149 @@
-# Ambient Web3 Experiment #3 - AI-driven governance (SVM)
+# Ambient Web3 Experiment #4 - Provably Fair Match (SVM)
 
-## Week 3 Scope
-AI-driven governance and automation with verified inference artifacts.
+## Week 4 Scope
+Emergent behavior: provably fair economic agents enabled by verified inference + on-chain execution.
 
-### AI Proposal Summarizer (Snapshot/Tally -> Ambient -> On-chain)
-Goal: minimal on-chain proposal request that stores a verifiable AI verdict.
+## Requirements
+- Solana CLI installed and configured for devnet
+- Anchor CLI installed
+- Node.js 18+ with Yarn (corepack or global yarn)
 
-On-chain fields for ProposalRequest
-- prompt_hash: sha256 of the exact prompt the relayer sends to the model
-- model_id: model name from relayer config
-- receipt_root: merkle_root from verified inference receipt when available, otherwise zeros
-- source: governance platform (snapshot or tally)
-- proposal_id: proposal identifier from the source
-- proposal_text: canonical proposal text (may be truncated)
+## Menu options (scripts/menu.sh)
 
-Canonical proposal text
-- Deterministic field order: source, proposal_id, space, title, author, start_unix, end_unix, choices, body_sha256, body_truncated, body
-- body_sha256 always hashes the full body fetched from the source
-- body_truncated is true when the body is shortened to fit transaction size limits
-- The create script trims the canonical text to stay within transaction limits (currently ~800 bytes)
+0) Install dependencies (apt + yarn)
+   - Commands:
+     ```bash
+     sudo apt update
+     sudo apt install -y curl build-essential pkg-config libssl-dev
+     corepack enable
+     cp .env.example .env
+     yarn install
+     ```
+1) Run match demo
+   - Command:
+     ```bash
+     yarn ts-node scripts/match_demo.ts
+     ```
+2) Run tournament demo
+   - Command:
+     ```bash
+     yarn ts-node scripts/tournament_demo.ts
+     ```
+3) Read match state (uses last_match_pda.txt if empty)
+   - Command:
+     ```bash
+     yarn ts-node scripts/read_match.ts <MATCH_PDA>
+     ```
+4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)
+   - Command:
+     ```bash
+     yarn ts-node scripts/verify_match_receipt.ts <MATCH_PDA>
+     ```
+5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)
+   - Command:
+     ```bash
+     solana balance <PUBKEY> --url https://api.devnet.solana.com
+     ```
+6) Build + deploy (after .env is set)
+   - Commands:
+     ```bash
+     anchor build
+     anchor deploy --no-idl
+     ```
+q) Quit
 
-AI role
-- Off-chain relayer builds a deterministic prompt and calls Ambient to produce strict JSON verdict + summary
-- On-chain stores verdict_code, summary_hash, prompt_hash, model_id, and receipt_root (when provided)
+### Scenario
+Two players escrow stake. They commit to inputs, reveal them on-chain, then three AI judges submit receipts and a majority verdict is finalized. After a short challenge window (slot-based), on-chain execution pays out the winner (or refunds on tie). If only one player reveals by the deadline, that player wins; if neither reveals, it’s a tie refund. Judges post a small bond; minority judges are slashed to the winner.
 
-Trust artifacts
-- prompt_hash: sha256 of the exact prompt used
-- model_id: which model produced the output
-- receipt_root: merkle_root from verified inference receipts (if available)
+Match types
+- 1 = contest
+- 2 = auction
+- 3 = simulation
 
-Limitations and failure cases
-- Off-chain relayer is trusted and can lie about the decision
-- Proposal bodies may be truncated due to transaction size limits
-- If Ambient returns invalid JSON, fulfillment fails and the request stays pending
-- If Ambient returns 429/500, relayer exits and request remains pending
+On-chain accounts
+- `Match` (commitments, revealed inputs, stake, judge counts, verdict, execute_after)
+- `MatchJudgeResult` (per-judge verdict + receipt_root + prompt_hash + model_id)
+- `match_escrow` PDA (system account holding both stakes)
 
-Verdict codes
-- 0 = unset
-- 1 = approve
-- 2 = reject
-- 3 = needs_more_info
+Instructions
+- `create_match` (both players escrow stake + store commitments + configurable challenge window in slots)
+- `reveal_match_input` (players reveal inputs)
+- `submit_match_judge_result` (3 AI judges submit receipts + bond)
+- `finalize_match` (majority verdict or reveal-timeout verdict + sets execute_after)
+- `execute_match` (payout winner/refund + distribute judge bonds after challenge window)
+
+Off-chain scripts
+- `scripts/match_demo.ts` (end-to-end demo)
+- `scripts/match_referee.ts` (submit 1 judge result)
+- `scripts/finalize_match.ts`
+- `scripts/execute_match.ts`, `scripts/read_match.ts`
+- `scripts/verify_match_receipt.ts` (checks prompt_hash consistency + receipt_root presence)
+- `scripts/tournament_demo.ts` (2 semifinals + final, prints champion)
+- `scripts/menu.sh` (interactive menu to run demos and checks)
+- `last_match_pda.txt` is written by demos for quick lookups
+- `last_champion_pubkey.txt` is written by tournament demo for quick lookups
 
 Env vars
-Copy `.env.example` to `.env` and fill in secrets. AMBIENT_API_KEY is required. TALLY_API_KEY is required only for Tally proposals.
+Copy `.env.example` to `.env` and fill in secrets. AMBIENT_API_KEY is required.
 
 ```bash
 cp .env.example .env
 ```
 Optional env validation:
 ```bash
-yarn ts-node scripts/validate_env.ts
+yarn node scripts/validate_env.cjs
 ```
 
-How to run (proposal summarizer)
-1) Build
+Build / deploy (after .env is set)
 ```bash
 anchor build
-```
-
-Optional: deploy (devnet) if the program changed
-```bash
-anchor deploy --no-idl
-```
-If you need to refresh the on-chain IDL:
-```bash
-anchor idl close F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu
-anchor idl init -f target/idl/ambient_svm_hello.json F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu
-```
-
-2) Create a proposal request from a governance URL (Snapshot or Tally)
-```bash
-yarn ts-node scripts/create_proposal_from_url.ts <PROPOSAL_URL>
-```
-
-3) Fulfill as relayer
-```bash
-yarn ts-node scripts/relayer_proposal_fulfill.ts <PROPOSAL_REQUEST_PDA>
-```
-
-4) Read proposal request (inspect on-chain state)
-```bash
-yarn ts-node scripts/read_proposal_request.ts <PROPOSAL_REQUEST_PDA>
-```
-
-### Governance Extensions (Minimal)
-Adds minimal support for revisions, voting, multi-judge consensus, and automation:
-- Proposal + ProposalRevision accounts
-- VoteRecord (1 wallet = 1 vote, For/Against/Abstain)
-- JudgeResult (3 judges) + finalize_consensus (majority)
-- ActionRequest created on finalize; complete_action transfers a fixed amount from treasury to proposal author
-
-How to run (governance minimal flow)
-1) Build
-```bash
-anchor build
-```
-
-2) Deploy (devnet) if the program changed
-```bash
 anchor deploy --no-idl
 ```
 
-3) Run the minimal flow (creates proposal, revision, votes, 3 judge results, consensus, and action)
+Run demo (end-to-end)
 ```bash
-yarn ts-node scripts/governance_minimal_flow.ts
+yarn ts-node scripts/match_demo.ts
 ```
 
-Notes
-- ActionRequest uses a fixed transfer amount of 0.001 SOL from the treasury vault.
-- The script funds the treasury vault with 0.002 SOL from your wallet before running the flow.
-- Treasury funds are held in a separate PDA vault (`treasury_vault`) to allow system transfers.
-
-Read governance state
+Manual flow (match already created + revealed)
+1) Submit 3 judge results (run 3x)
 ```bash
-yarn ts-node scripts/read_governance_state.ts <PROPOSAL_PDA>
+yarn ts-node scripts/match_referee.ts <MATCH_PDA>
 ```
 
-Execute pending action
+2) Finalize consensus
 ```bash
-yarn ts-node scripts/execute_action.ts <PROPOSAL_PDA>
+yarn ts-node scripts/finalize_match.ts <MATCH_PDA>
 ```
 
-### AI Judges + Consensus (Ambient)
-1) Create a proposal (no judges yet)
+3) Execute payout after challenge window
 ```bash
-yarn ts-node scripts/create_governance_proposal.ts
+yarn ts-node scripts/execute_match.ts <MATCH_PDA>
 ```
 
-2) Run AI judges (3 Ambient calls), finalize consensus, and auto-complete action on approve
+4) Read match state
 ```bash
-yarn ts-node scripts/ai_judge_consensus.ts <PROPOSAL_PDA>
+yarn ts-node scripts/read_match.ts <MATCH_PDA>
 ```
 
-Notes
-- Requires AMBIENT_API_KEY (and optional AMBIENT_MODEL_ID)
-- Logs receipt_root when the API returns a verified receipt
-- Ensures treasury and vault exist, and tops up the vault if needed for action execution
-
-3) Read state
+5) Verify prompt hash and receipt root presence
 ```bash
-yarn ts-node scripts/read_governance_state.ts <PROPOSAL_PDA>
+yarn ts-node scripts/verify_match_receipt.ts <MATCH_PDA>
 ```
 
-### Demo Runner (All-in-one)
-Runs the full governance flow in one command (create proposal + 3 AI judges + consensus + action execution).
-```bash
-yarn ts-node scripts/demo_runner.ts
-```
-Flags:
-- `--skip-judges` to skip Ambient calls and consensus
-- `--skip-action` to skip action execution
-- `--proposal <PDA>` to reuse an existing proposal
+Example run (devnet, match demo)
+- Match PDA: 5zZgyuPFBSWAKqopMi35zdpjiuM1HZo42KcM9YnrqjPo
+- Final verdict: 1 (A)
+- Judge receipt roots:
+  - 63ce62919f3e4c3a07743fb96402817cb385b511b6e9757805ed9c7d85a30197
+  - 8a2d3130a4ea9879a8c5990c3858fb87f41b17e0a9bbaf850a19857706561e4c
+  - bb607c7093cb4c884e73eb1f108473c3c5fd52b74e4eaba575d07fc1029c6beb
+- Prompt hash: 41994d7e18b253ddbf048efd8a5951af9aceb3d7fbe2fad0b8107bfc8a0a4b88
+- Model id: zai-org/GLM-4.6
+- Escrow PDA: 5z29K75AHdzXnfvuhLRKTeETL1ni4aFE3UTPchxCnPtU
 
-Example run (devnet, demo runner)
-- Proposal PDA: AntU77zSZLYRXjJt8UCbPQUgA1tixSF415LsfehduihV
-- Final verdict: 3 (needs_more_info)
-- Votes: for=1 against=0 abstain=0
-- Judge results: approve=0 reject=0 needs=3
-- Receipt roots (3 judges):
-  - b1cd9058943dc1c3fe9d508e35af86f968d88d8958fbb07c13f8be3a7bd48e17
-  - d118f6bb6cb6a02374019fc3ebd51ba05929964563e0475a2f751afaa5db3103
-  - e3cc5162b6aa9f5de1d81de8d77fb4d7c25eeed27dcd68bf0daf7be7415f3917
+Example run (devnet, tournament demo)
+- Semi final 1: 7rRu2mzgSPwBaBwRqpHq3msuzAzZpk9uHiW3rkVPeuHp
+- Semi final 2: 9TpNi44Ac9VA4Eo4KRXV232LpcX3XHA7fDkD5f9fFHSV
+- Final match: 2VBqVcZdvPqnnH9aVMRNjJbsfHsaniHRpyV8RtandL2Z
+- Champion: BJnbMvEfa5byaMeVt7cAz3RB65jHyS5oQN4qoQooSa1s
