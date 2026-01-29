@@ -17,7 +17,8 @@ const ACTION_LAMPORTS: u64 = 1_000_000;
 const MAX_MATCH_EXTRA_LEN: usize = 512;
 const MAX_MATCH_SALT_LEN: usize = 64;
 const MATCH_REVEAL_WINDOW_SECS: i64 = 600;
-const MAX_MATCH_CHALLENGE_PERIOD_SECS: i64 = 3600;
+const MAX_MATCH_CHALLENGE_PERIOD_SLOTS: u64 = 3600;
+const JUDGE_BOND_LAMPORTS: u64 = 1_000_000;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -373,12 +374,13 @@ pub mod ambient_svm_hello {
         commit_a: [u8; 32],
         commit_b: [u8; 32],
         stake_lamports: u64,
-        challenge_period_secs: i64,
+        challenge_period_slots: u64,
         nonce: u64,
     ) -> Result<()> {
         require!(match_type >= 1 && match_type <= 3, ErrorCode::BadMatchType);
         require!(
-            challenge_period_secs > 0 && challenge_period_secs <= MAX_MATCH_CHALLENGE_PERIOD_SECS,
+            challenge_period_slots > 0
+                && challenge_period_slots <= MAX_MATCH_CHALLENGE_PERIOD_SLOTS,
             ErrorCode::BadChallengePeriod
         );
         require!(
@@ -452,12 +454,15 @@ pub mod ambient_svm_hello {
         m.revealed_a = 0;
         m.revealed_b = 0;
         m.reveal_deadline = now + MATCH_REVEAL_WINDOW_SECS;
-        m.finalized_at = 0;
-        m.execute_after = 0;
+        m.finalized_slot = 0;
+        m.execute_after_slot = 0;
         m.judge_a = 0;
         m.judge_b = 0;
         m.judge_tie = 0;
-        m.challenge_period_secs = challenge_period_secs;
+        m.challenge_period_slots = challenge_period_slots;
+        m.judge_keys = [Pubkey::default(); 3];
+        m.judge_verdicts = [0u8; 3];
+        m.judge_count = 0;
 
         Ok(())
     }
@@ -516,6 +521,7 @@ pub mod ambient_svm_hello {
         require!(m.revealed_a == 1 && m.revealed_b == 1, ErrorCode::MatchNotRevealed);
         let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
         require!(total < 3, ErrorCode::TooManyJudges);
+        require!(m.judge_count < 3, ErrorCode::TooManyJudges);
 
         if verdict == 1 {
             m.judge_a = m.judge_a.saturating_add(1);
@@ -524,6 +530,11 @@ pub mod ambient_svm_hello {
         } else {
             m.judge_tie = m.judge_tie.saturating_add(1);
         }
+
+        let idx = m.judge_count as usize;
+        m.judge_keys[idx] = ctx.accounts.judge.key();
+        m.judge_verdicts[idx] = verdict;
+        m.judge_count = m.judge_count.saturating_add(1);
 
         m.prompt_hash = prompt_hash;
         m.receipt_root = receipt_root;
@@ -536,6 +547,15 @@ pub mod ambient_svm_hello {
         r.receipt_root = receipt_root;
         r.prompt_hash = prompt_hash;
         r.model_id = model_id;
+
+        let cpi_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.judge.to_account_info(),
+                to: ctx.accounts.match_escrow.to_account_info(),
+            },
+        );
+        system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
 
         Ok(())
     }
@@ -568,8 +588,9 @@ pub mod ambient_svm_hello {
 
         m.verdict = verdict;
         m.status = 1;
-        m.finalized_at = now;
-        m.execute_after = now + m.challenge_period_secs;
+        let slot = Clock::get()?.slot;
+        m.finalized_slot = slot;
+        m.execute_after_slot = slot + m.challenge_period_slots;
 
         Ok(())
     }
@@ -577,15 +598,19 @@ pub mod ambient_svm_hello {
     pub fn execute_match(ctx: Context<ExecuteMatch>) -> Result<()> {
         let m = &mut ctx.accounts.game_match;
         require!(m.status == 1, ErrorCode::MatchNotFinalized);
-        let now = Clock::get()?.unix_timestamp;
-        require!(now >= m.execute_after, ErrorCode::ChallengePeriodActive);
+        let slot = Clock::get()?.slot;
+        require!(slot >= m.execute_after_slot, ErrorCode::ChallengePeriodActive);
         require_keys_eq!(m.player_a, ctx.accounts.player_a.key(), ErrorCode::BadMatchPlayer);
         require_keys_eq!(m.player_b, ctx.accounts.player_b.key(), ErrorCode::BadMatchPlayer);
 
         let rent = Rent::get()?.minimum_balance(0);
         let total = m.stake_lamports.checked_mul(2).unwrap();
         let escrow_balance = ctx.accounts.match_escrow.lamports();
-        require!(escrow_balance >= rent + total, ErrorCode::EscrowBalanceLow);
+        let bond_total = JUDGE_BOND_LAMPORTS.saturating_mul(m.judge_count as u64);
+        require!(
+            escrow_balance >= rent + total + bond_total,
+            ErrorCode::EscrowBalanceLow
+        );
 
         let bump = ctx.bumps.match_escrow;
         let match_key = m.key();
@@ -631,6 +656,57 @@ pub mod ambient_svm_hello {
                 signer,
             );
             system_program::transfer(cpi_ctx_b, m.stake_lamports)?;
+        }
+
+        if m.judge_count > 0 {
+            let judge_ais = [
+                ctx.accounts.judge_0.to_account_info(),
+                ctx.accounts.judge_1.to_account_info(),
+                ctx.accounts.judge_2.to_account_info(),
+            ];
+            for i in 0..m.judge_count as usize {
+                let judge_ai = &judge_ais[i];
+                require_keys_eq!(
+                    m.judge_keys[i],
+                    judge_ai.key(),
+                    ErrorCode::BadJudgeAccount
+                );
+                require!(
+                    judge_ai.owner == &system_program::ID,
+                    ErrorCode::BadJudgeAccount
+                );
+                if m.verdict == 3 || m.judge_verdicts[i] == m.verdict {
+                    let cpi_ctx = CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.match_escrow.to_account_info(),
+                            to: judge_ai.clone(),
+                        },
+                        signer,
+                    );
+                    system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+                } else if m.verdict == 1 {
+                    let cpi_ctx = CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.match_escrow.to_account_info(),
+                            to: ctx.accounts.player_a.to_account_info(),
+                        },
+                        signer,
+                    );
+                    system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+                } else {
+                    let cpi_ctx = CpiContext::new_with_signer(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.match_escrow.to_account_info(),
+                            to: ctx.accounts.player_b.to_account_info(),
+                        },
+                        signer,
+                    );
+                    system_program::transfer(cpi_ctx, JUDGE_BOND_LAMPORTS)?;
+                }
+            }
         }
 
         m.status = 2;
@@ -922,6 +998,13 @@ pub struct SubmitMatchJudgeResult<'info> {
     #[account(mut)]
     pub game_match: Account<'info, Match>,
     #[account(
+        mut,
+        seeds = [b"match_escrow", game_match.key().as_ref()],
+        bump
+    )]
+    /// CHECK: PDA system account created via create_account; no data is stored.
+    pub match_escrow: UncheckedAccount<'info>,
+    #[account(
         init,
         payer = judge,
         space = MatchJudgeResult::space(),
@@ -956,6 +1039,12 @@ pub struct ExecuteMatch<'info> {
     pub player_a: SystemAccount<'info>,
     #[account(mut)]
     pub player_b: SystemAccount<'info>,
+    #[account(mut)]
+    pub judge_0: SystemAccount<'info>,
+    #[account(mut)]
+    pub judge_1: SystemAccount<'info>,
+    #[account(mut)]
+    pub judge_2: SystemAccount<'info>,
     #[account(mut)]
     pub executor: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -1182,12 +1271,15 @@ pub struct Match {
     pub revealed_a: u8,
     pub revealed_b: u8,
     pub reveal_deadline: i64,
-    pub finalized_at: i64,
-    pub execute_after: i64,
+    pub finalized_slot: u64,
+    pub execute_after_slot: u64,
     pub judge_a: u8,
     pub judge_b: u8,
     pub judge_tie: u8,
-    pub challenge_period_secs: i64,
+    pub challenge_period_slots: u64,
+    pub judge_keys: [Pubkey; 3],
+    pub judge_verdicts: [u8; 3],
+    pub judge_count: u8,
 }
 
 impl Match {
@@ -1219,6 +1311,9 @@ impl Match {
         + 1
         + 1
         + 8
+        + 32 * 3
+        + 1 * 3
+        + 1
     }
 }
 
@@ -1310,6 +1405,10 @@ pub enum ErrorCode {
     BadChallengePeriod,
     #[msg("Reveal window still active")]
     RevealWindowActive,
+    #[msg("Missing judge accounts")]
+    MissingJudgeAccounts,
+    #[msg("Bad judge account")]
+    BadJudgeAccount,
     #[msg("Bad commitment")]
     BadCommitment,
     #[msg("Reveal window expired")]

@@ -84,11 +84,12 @@ export function logMatchState(
   console.log("revealed_a:", match.revealedA);
   console.log("revealed_b:", match.revealedB);
   console.log("reveal_deadline:", match.revealDeadline.toString());
-  console.log("finalized_at:", match.finalizedAt.toString());
-  console.log("execute_after:", match.executeAfter.toString());
+  console.log("finalized_slot:", match.finalizedSlot.toString());
+  console.log("execute_after_slot:", match.executeAfterSlot.toString());
   console.log("judge_a:", match.judgeA);
   console.log("judge_b:", match.judgeB);
   console.log("judge_tie:", match.judgeTie);
+  console.log("judge_count:", match.judgeCount);
   console.log("executor:", match.executor.toBase58());
   console.log("escrow:", escrowPda.toBase58());
   console.log("escrow_lamports:", escrowLamports);

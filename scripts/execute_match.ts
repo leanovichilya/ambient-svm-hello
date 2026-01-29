@@ -9,23 +9,29 @@ async function main() {
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const accountNs: any = (program as any).account;
   const m = await accountNs.match.fetch(matchPda);
-  const executeAfterRaw = m.executeAfter;
+  const executeAfterRaw = m.executeAfterSlot;
   const executeAfter =
     typeof executeAfterRaw?.toNumber === "function"
       ? executeAfterRaw.toNumber()
       : Number(executeAfterRaw ?? 0);
-  const now = Math.floor(Date.now() / 1000);
-  if (executeAfter > now) {
-    console.error(`Challenge period active. execute_after=${executeAfter}`);
+  const slot = await program.provider.connection.getSlot();
+  if (executeAfter > slot) {
+    console.error(`Challenge period active. execute_after_slot=${executeAfter}`);
     process.exit(1);
   }
 
+  const judgeKeys = (m.judgeKeys as anchor.web3.PublicKey[]).map((k) =>
+    k && !k.equals(anchor.web3.PublicKey.default) ? k : provider.wallet.publicKey
+  );
   await program.methods
     .executeMatch()
     .accounts({
       gameMatch: matchPda,
       playerA: m.playerA,
       playerB: m.playerB,
+      judge0: judgeKeys[0],
+      judge1: judgeKeys[1],
+      judge2: judgeKeys[2],
       executor: provider.wallet.publicKey,
     })
     .rpc();

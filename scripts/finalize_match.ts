@@ -21,7 +21,7 @@ async function main() {
   const m = state.match;
   console.log("match:", matchPda.toBase58());
   console.log("final_verdict:", m.verdict);
-  console.log("execute_after:", m.executeAfter.toString());
+  console.log("execute_after_slot:", m.executeAfterSlot.toString());
 }
 
 main().catch((e) => {

@@ -4,7 +4,7 @@
 Emergent behavior: provably fair economic agents enabled by verified inference + on-chain execution.
 
 ### Scenario
-Two players escrow stake. They commit to inputs, reveal them on-chain, then three AI judges submit receipts and a majority verdict is finalized. After a short challenge window, on-chain execution pays out the winner (or refunds on tie). If only one player reveals by the deadline, that player wins; if neither reveals, it’s a tie refund.
+Two players escrow stake. They commit to inputs, reveal them on-chain, then three AI judges submit receipts and a majority verdict is finalized. After a short challenge window (slot-based), on-chain execution pays out the winner (or refunds on tie). If only one player reveals by the deadline, that player wins; if neither reveals, it’s a tie refund. Judges post a small bond; minority judges are slashed to the winner.
 
 Match types
 - 1 = contest
@@ -17,11 +17,11 @@ On-chain accounts
 - `match_escrow` PDA (system account holding both stakes)
 
 Instructions
-- `create_match` (both players escrow stake + store commitments + configurable challenge window)
+- `create_match` (both players escrow stake + store commitments + configurable challenge window in slots)
 - `reveal_match_input` (players reveal inputs)
-- `submit_match_judge_result` (3 AI judges submit receipts)
+- `submit_match_judge_result` (3 AI judges submit receipts + bond)
 - `finalize_match` (majority verdict or reveal-timeout verdict + sets execute_after)
-- `execute_match` (payout winner or refund on tie after challenge window)
+- `execute_match` (payout winner/refund + distribute judge bonds after challenge window)
 
 Off-chain scripts
 - `scripts/match_demo.ts` (end-to-end demo)
@@ -29,6 +29,7 @@ Off-chain scripts
 - `scripts/finalize_match.ts`
 - `scripts/execute_match.ts`, `scripts/read_match.ts`
 - `scripts/verify_match_receipt.ts` (checks prompt_hash consistency + receipt_root presence)
+- `scripts/tournament_demo.ts` (2 semifinals + final, prints champion)
 
 Env vars
 Copy `.env.example` to `.env` and fill in secrets. AMBIENT_API_KEY is required.
@@ -79,12 +80,18 @@ yarn ts-node scripts/verify_match_receipt.ts <MATCH_PDA>
 ```
 
 Example run (devnet, match demo)
-- Match PDA: ENK23j13NFQY1BJG7DXe6bwHu5KNyYGxQ6tfBFHXf5Ji
+- Match PDA: 5zZgyuPFBSWAKqopMi35zdpjiuM1HZo42KcM9YnrqjPo
 - Final verdict: 1 (A)
 - Judge receipt roots:
-  - ab7c2b5b51b501fc781601931974bf379f49c041c6bf1e9901d7c5e18c5015b9
-  - cf25758a39c5869ad63b2c27748ed885b107dd5959525cd692df425691c3b71e
-  - 9d66dbd34b363e0bc8692ca856737fa0987e1d193a25a9ccd281d865c037a732
+  - 63ce62919f3e4c3a07743fb96402817cb385b511b6e9757805ed9c7d85a30197
+  - 8a2d3130a4ea9879a8c5990c3858fb87f41b17e0a9bbaf850a19857706561e4c
+  - bb607c7093cb4c884e73eb1f108473c3c5fd52b74e4eaba575d07fc1029c6beb
 - Prompt hash: 41994d7e18b253ddbf048efd8a5951af9aceb3d7fbe2fad0b8107bfc8a0a4b88
 - Model id: zai-org/GLM-4.6
-- Escrow PDA: 8DTVMLHBc6uZSi7S66NxnT3kxQgnYBsoCGA8d5asMX3e
+- Escrow PDA: 5z29K75AHdzXnfvuhLRKTeETL1ni4aFE3UTPchxCnPtU
+
+Example run (devnet, tournament demo)
+- Semi final 1: 7rRu2mzgSPwBaBwRqpHq3msuzAzZpk9uHiW3rkVPeuHp
+- Semi final 2: 9TpNi44Ac9VA4Eo4KRXV232LpcX3XHA7fDkD5f9fFHSV
+- Final match: 2VBqVcZdvPqnnH9aVMRNjJbsfHsaniHRpyV8RtandL2Z
+- Champion: BJnbMvEfa5byaMeVt7cAz3RB65jHyS5oQN4qoQooSa1s
