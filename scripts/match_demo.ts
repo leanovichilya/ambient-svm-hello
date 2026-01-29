@@ -13,7 +13,11 @@ import {
   requireEnv,
   sha256Bytes,
 } from "./utils";
-import { JUDGE_LAMPORTS, MATCH_STAKE_LAMPORTS } from "./constants";
+import {
+  JUDGE_LAMPORTS,
+  MATCH_CHALLENGE_PERIOD_SECS,
+  MATCH_STAKE_LAMPORTS,
+} from "./constants";
 
 const MATCH_TYPE = 1;
 const FUND_PLAYER_B = 2_000_000;
@@ -77,6 +81,7 @@ async function main() {
       commitA as any,
       commitB as any,
       new anchor.BN(MATCH_STAKE_LAMPORTS),
+      new anchor.BN(MATCH_CHALLENGE_PERIOD_SECS),
       nonce
     )
     .accounts({

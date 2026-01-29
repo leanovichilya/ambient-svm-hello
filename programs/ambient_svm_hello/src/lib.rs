@@ -17,7 +17,7 @@ const ACTION_LAMPORTS: u64 = 1_000_000;
 const MAX_MATCH_EXTRA_LEN: usize = 512;
 const MAX_MATCH_SALT_LEN: usize = 64;
 const MATCH_REVEAL_WINDOW_SECS: i64 = 600;
-const MATCH_CHALLENGE_PERIOD_SECS: i64 = 5;
+const MAX_MATCH_CHALLENGE_PERIOD_SECS: i64 = 3600;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -373,9 +373,14 @@ pub mod ambient_svm_hello {
         commit_a: [u8; 32],
         commit_b: [u8; 32],
         stake_lamports: u64,
+        challenge_period_secs: i64,
         nonce: u64,
     ) -> Result<()> {
         require!(match_type >= 1 && match_type <= 3, ErrorCode::BadMatchType);
+        require!(
+            challenge_period_secs > 0 && challenge_period_secs <= MAX_MATCH_CHALLENGE_PERIOD_SECS,
+            ErrorCode::BadChallengePeriod
+        );
         require!(
             criteria.as_bytes().len() <= MAX_CRITERIA_LEN,
             ErrorCode::MatchTextTooLong
@@ -452,6 +457,7 @@ pub mod ambient_svm_hello {
         m.judge_a = 0;
         m.judge_b = 0;
         m.judge_tie = 0;
+        m.challenge_period_secs = challenge_period_secs;
 
         Ok(())
     }
@@ -537,21 +543,33 @@ pub mod ambient_svm_hello {
     pub fn finalize_match(ctx: Context<FinalizeMatch>) -> Result<()> {
         let m = &mut ctx.accounts.game_match;
         require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
-        let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
-        require!(total == 3, ErrorCode::NotEnoughJudges);
-
-        let verdict = if m.judge_a >= 2 {
-            1
-        } else if m.judge_b >= 2 {
-            2
-        } else {
-            3
-        };
         let now = Clock::get()?.unix_timestamp;
+
+        let verdict = if m.revealed_a == 1 && m.revealed_b == 1 {
+            let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
+            require!(total == 3, ErrorCode::NotEnoughJudges);
+            if m.judge_a >= 2 {
+                1
+            } else if m.judge_b >= 2 {
+                2
+            } else {
+                3
+            }
+        } else {
+            require!(now > m.reveal_deadline, ErrorCode::RevealWindowActive);
+            if m.revealed_a == 1 && m.revealed_b == 0 {
+                1
+            } else if m.revealed_b == 1 && m.revealed_a == 0 {
+                2
+            } else {
+                3
+            }
+        };
+
         m.verdict = verdict;
         m.status = 1;
         m.finalized_at = now;
-        m.execute_after = now + MATCH_CHALLENGE_PERIOD_SECS;
+        m.execute_after = now + m.challenge_period_secs;
 
         Ok(())
     }
@@ -867,7 +885,7 @@ pub struct CompleteAction<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(match_type: u8, criteria: String, extra: String, commit_a: [u8; 32], commit_b: [u8; 32], stake_lamports: u64, nonce: u64)]
+#[instruction(match_type: u8, criteria: String, extra: String, commit_a: [u8; 32], commit_b: [u8; 32], stake_lamports: u64, challenge_period_secs: i64, nonce: u64)]
 pub struct CreateMatch<'info> {
     #[account(
         init,
@@ -1169,6 +1187,7 @@ pub struct Match {
     pub judge_a: u8,
     pub judge_b: u8,
     pub judge_tie: u8,
+    pub challenge_period_secs: i64,
 }
 
 impl Match {
@@ -1199,6 +1218,7 @@ impl Match {
         + 1
         + 1
         + 1
+        + 8
     }
 }
 
@@ -1286,6 +1306,10 @@ pub enum ErrorCode {
     BadMatchPlayer,
     #[msg("Escrow balance too low")]
     EscrowBalanceLow,
+    #[msg("Bad challenge period")]
+    BadChallengePeriod,
+    #[msg("Reveal window still active")]
+    RevealWindowActive,
     #[msg("Bad commitment")]
     BadCommitment,
     #[msg("Reveal window expired")]

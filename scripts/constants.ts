@@ -12,3 +12,4 @@ export const MAX_LIST_ITEMS = 5;
 export const MAX_LIST_ITEM_CHARS = 120;
 
 export const MATCH_STAKE_LAMPORTS = 1_000_000;
+export const MATCH_CHALLENGE_PERIOD_SECS = 5;
