@@ -1,25 +1,25 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { writeFile } from "fs/promises";
-import { getProgram } from "./anchor";
-import { buildMatchPrompt } from "./prompts";
-import { fetchMatchState } from "./match";
+import { getProgram } from "../anchor";
+import { buildMatchPrompt } from "../prompts";
+import { fetchMatchState } from "./state";
 import {
   getModelIdOrExit,
   requireEnv,
   sha256Bytes,
-} from "./utils";
+} from "../utils";
 import {
   createMatchAndReveal,
   finalizeAndExecuteMatch,
   fundKeypairs,
   runJudgesAndSubmit,
-} from "./match_helpers";
+} from "./helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
   MATCH_STAKE_LAMPORTS,
-} from "./constants";
+} from "../constants";
 
 const MATCH_TYPE = 1;
 const FUND_PLAYER = 60_000_000;

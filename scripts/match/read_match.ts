@@ -1,11 +1,11 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { getProgram } from "./anchor";
-import { fetchMatchState, logMatchState } from "./match";
-import { getArgOrExit, usage } from "./utils";
+import { getProgram } from "../anchor";
+import { fetchMatchState, logMatchState } from "./state";
+import { getArgOrExit, usage } from "../utils";
 
 async function main() {
-  const matchPdaStr = getArgOrExit(usage("read_match.ts", "<MATCH_PDA>"));
+  const matchPdaStr = getArgOrExit(usage("match/read_match.ts", "<MATCH_PDA>"));
   const flag = process.argv[3];
   const mode = flag === "--short" || flag === "-s" ? "short" : "full";
   const { program } = getProgram();

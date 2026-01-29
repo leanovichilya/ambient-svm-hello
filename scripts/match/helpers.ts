@@ -1,9 +1,9 @@
 import * as anchor from "@coral-xyz/anchor";
 import { randomBytes } from "crypto";
-import { AmbientApiError, callAmbient } from "./ambient";
-import { commitMatchInput, fetchMatchState, getMatchPda } from "./match";
-import { buildMatchPrompt } from "./prompts";
-import { normalizeWinner, parseJsonBlock } from "./utils";
+import { AmbientApiError, callAmbient } from "../ambient";
+import { commitMatchInput, fetchMatchState, getMatchPda } from "./state";
+import { buildMatchPrompt } from "../prompts";
+import { normalizeWinner, parseJsonBlock } from "../utils";
 
 export async function fundWallet(
   provider: anchor.AnchorProvider,
@@ -260,11 +260,7 @@ export async function waitForExecuteSlot(
   const provider = program.provider as anchor.AnchorProvider;
   for (let i = 0; i < maxChecks; i += 1) {
     const state = await fetchMatchState(program as any, matchPda);
-    const executeAfterRaw = state.match.executeAfterSlot;
-    const executeAfter =
-      typeof executeAfterRaw?.toNumber === "function"
-        ? executeAfterRaw.toNumber()
-        : Number(executeAfterRaw ?? 0);
+    const executeAfter = getExecuteAfterSlot(state.match);
     const slot = await provider.connection.getSlot();
     if (slot >= executeAfter) {
       return;

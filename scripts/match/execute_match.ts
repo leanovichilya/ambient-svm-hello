@@ -1,12 +1,12 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { getProgram } from "./anchor";
-import { fetchMatchState } from "./match";
-import { getArgOrExit, usage } from "./utils";
-import { getExecuteAfterSlot, getJudgeKeys } from "./match_helpers";
+import { getProgram } from "../anchor";
+import { fetchMatchState } from "./state";
+import { getArgOrExit, usage } from "../utils";
+import { getExecuteAfterSlot, getJudgeKeys } from "./helpers";
 
 async function main() {
-  const matchPdaStr = getArgOrExit(usage("execute_match.ts", "<MATCH_PDA>"));
+  const matchPdaStr = getArgOrExit(usage("match/execute_match.ts", "<MATCH_PDA>"));
   const { provider, program } = getProgram();
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const state = await fetchMatchState(program as any, matchPda);

@@ -22,22 +22,22 @@ Emergent behavior: provably fair economic agents enabled by verified inference +
 1) Run match demo
    - Command:
      ```bash
-     yarn ts-node scripts/match_demo.ts
+     yarn ts-node scripts/match/demo.ts
      ```
 2) Run tournament demo
    - Command:
      ```bash
-     yarn ts-node scripts/tournament_demo.ts
+     yarn ts-node scripts/match/tournament_demo.ts
      ```
 3) Read match state (uses last_match_pda.txt if empty)
    - Command:
      ```bash
-     yarn ts-node scripts/read_match.ts <MATCH_PDA>
+     yarn ts-node scripts/match/read_match.ts <MATCH_PDA>
      ```
 4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)
    - Command:
      ```bash
-     yarn ts-node scripts/verify_match_receipt.ts <MATCH_PDA>
+     yarn ts-node scripts/match/verify_match_receipt.ts <MATCH_PDA>
      ```
 5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)
    - Command:
@@ -73,12 +73,12 @@ Instructions
 - `execute_match` (payout winner/refund + distribute judge bonds after challenge window)
 
 Off-chain scripts
-- `scripts/match_demo.ts` (end-to-end demo)
-- `scripts/match_referee.ts` (submit 1 judge result)
+- `scripts/match/demo.ts` (end-to-end demo)
+- `scripts/match/referee.ts` (submit 1 judge result)
 - `scripts/finalize_match.ts`
-- `scripts/execute_match.ts`, `scripts/read_match.ts`
-- `scripts/verify_match_receipt.ts` (checks prompt_hash consistency + receipt_root presence)
-- `scripts/tournament_demo.ts` (2 semifinals + final, prints champion)
+- `scripts/match/execute_match.ts`, `scripts/match/read_match.ts`
+- `scripts/match/verify_match_receipt.ts` (checks prompt_hash consistency + receipt_root presence)
+- `scripts/match/tournament_demo.ts` (2 semifinals + final, prints champion)
 - `scripts/menu.sh` (interactive menu to run demos and checks)
 - `last_match_pda.txt` is written by demos for quick lookups
 - `last_champion_pubkey.txt` is written by tournament demo for quick lookups
@@ -102,13 +102,13 @@ anchor deploy --no-idl
 
 Run demo (end-to-end)
 ```bash
-yarn ts-node scripts/match_demo.ts
+yarn ts-node scripts/match/demo.ts
 ```
 
 Manual flow (match already created + revealed)
 1) Submit 3 judge results (run 3x)
 ```bash
-yarn ts-node scripts/match_referee.ts <MATCH_PDA>
+yarn ts-node scripts/match/referee.ts <MATCH_PDA>
 ```
 
 2) Finalize consensus
@@ -118,17 +118,17 @@ yarn ts-node scripts/finalize_match.ts <MATCH_PDA>
 
 3) Execute payout after challenge window
 ```bash
-yarn ts-node scripts/execute_match.ts <MATCH_PDA>
+yarn ts-node scripts/match/execute_match.ts <MATCH_PDA>
 ```
 
 4) Read match state
 ```bash
-yarn ts-node scripts/read_match.ts <MATCH_PDA>
+yarn ts-node scripts/match/read_match.ts <MATCH_PDA>
 ```
 
 5) Verify prompt hash and receipt root presence
 ```bash
-yarn ts-node scripts/verify_match_receipt.ts <MATCH_PDA>
+yarn ts-node scripts/match/verify_match_receipt.ts <MATCH_PDA>
 ```
 
 Example run (devnet, match demo)
@@ -147,3 +147,4 @@ Example run (devnet, tournament demo)
 - Semi final 2: 9TpNi44Ac9VA4Eo4KRXV232LpcX3XHA7fDkD5f9fFHSV
 - Final match: 2VBqVcZdvPqnnH9aVMRNjJbsfHsaniHRpyV8RtandL2Z
 - Champion: BJnbMvEfa5byaMeVt7cAz3RB65jHyS5oQN4qoQooSa1s
+

@@ -27,10 +27,10 @@ while true; do
       yarn install
       ;;
     1)
-      yarn ts-node scripts/match_demo.ts
+      yarn ts-node scripts/match/demo.ts
       ;;
     2)
-      yarn ts-node scripts/tournament_demo.ts
+      yarn ts-node scripts/match/tournament_demo.ts
       ;;
     3)
       read -r -p "Match PDA (enter for last): " pda
@@ -47,9 +47,9 @@ while true; do
       fi
       read -r -p "Short output? [y/N]: " short
       if [[ "$short" == "y" || "$short" == "Y" ]]; then
-        yarn ts-node scripts/read_match.ts "$pda" --short
+        yarn ts-node scripts/match/read_match.ts "$pda" --short
       else
-        yarn ts-node scripts/read_match.ts "$pda"
+        yarn ts-node scripts/match/read_match.ts "$pda"
       fi
       ;;
     4)
@@ -65,7 +65,7 @@ while true; do
         echo "Invalid pubkey"
         continue
       fi
-      yarn ts-node scripts/verify_match_receipt.ts "$pda"
+      yarn ts-node scripts/match/verify_match_receipt.ts "$pda"
       ;;
     5)
       read -r -p "Champion pubkey (enter for last): " pubkey

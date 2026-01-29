@@ -2,7 +2,7 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
 import { getArgOrExit, usage } from "./utils";
-import { fetchMatchState } from "./match";
+import { fetchMatchState } from "./match/state";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("finalize_match.ts", "<MATCH_PDA>"));

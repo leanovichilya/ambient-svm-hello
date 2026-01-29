@@ -1,7 +1,7 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { getProgram } from "./anchor";
-import { fetchMatchState } from "./match";
+import { getProgram } from "../anchor";
+import { fetchMatchState } from "./state";
 import {
   getArgOrExit,
   getModelIdOrExit,
@@ -9,17 +9,17 @@ import {
   requireEnv,
   sha256Bytes,
   usage,
-} from "./utils";
-import { JUDGE_LAMPORTS } from "./constants";
+} from "../utils";
+import { JUDGE_LAMPORTS } from "../constants";
 import {
   buildPromptFromMatch,
   fundWallet,
   getAmbientJudgeResult,
   submitMatchJudgeResult,
-} from "./match_helpers";
+} from "./helpers";
 
 async function main() {
-  const matchPdaStr = getArgOrExit(usage("match_referee.ts", "<MATCH_PDA>"));
+  const matchPdaStr = getArgOrExit(usage("match/referee.ts", "<MATCH_PDA>"));
 
   const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
   const MODEL_ID = getModelIdOrExit();
