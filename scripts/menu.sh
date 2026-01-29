@@ -10,6 +10,7 @@ while true; do
   echo "4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)"
   echo "5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)"
   echo "6) Build + deploy (after .env is set)"
+  echo "7) Run tests (anchor test)"
   echo "q) Quit"
   read -r -p "> " choice
 
@@ -27,10 +28,10 @@ while true; do
       yarn install
       ;;
     1)
-      yarn ts-node scripts/match_demo.ts
+      yarn ts-node scripts/match/demo.ts
       ;;
     2)
-      yarn ts-node scripts/tournament_demo.ts
+      yarn ts-node scripts/match/tournament_demo.ts
       ;;
     3)
       read -r -p "Match PDA (enter for last): " pda
@@ -45,7 +46,12 @@ while true; do
         echo "Invalid pubkey"
         continue
       fi
-      yarn ts-node scripts/read_match.ts "$pda"
+      read -r -p "Short output? [y/N]: " short
+      if [[ "$short" == "y" || "$short" == "Y" ]]; then
+        yarn ts-node scripts/match/read_match.ts "$pda" --short
+      else
+        yarn ts-node scripts/match/read_match.ts "$pda"
+      fi
       ;;
     4)
       read -r -p "Match PDA (enter for last): " pda
@@ -60,7 +66,7 @@ while true; do
         echo "Invalid pubkey"
         continue
       fi
-      yarn ts-node scripts/verify_match_receipt.ts "$pda"
+      yarn ts-node scripts/match/verify_match_receipt.ts "$pda"
       ;;
     5)
       read -r -p "Champion pubkey (enter for last): " pubkey
@@ -80,6 +86,9 @@ while true; do
     6)
       anchor build
       anchor deploy --no-idl
+      ;;
+    7)
+      anchor test
       ;;
     q)
       exit 0
