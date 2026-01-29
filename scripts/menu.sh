@@ -10,6 +10,7 @@ while true; do
   echo "4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)"
   echo "5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)"
   echo "6) Build + deploy (after .env is set)"
+  echo "7) Run tests (anchor test)"
   echo "q) Quit"
   read -r -p "> " choice
 
@@ -85,6 +86,9 @@ while true; do
     6)
       anchor build
       anchor deploy --no-idl
+      ;;
+    7)
+      anchor test
       ;;
     q)
       exit 0

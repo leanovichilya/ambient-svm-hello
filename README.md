@@ -94,6 +94,11 @@ Optional env validation:
 yarn node scripts/validate_env.cjs
 ```
 
+Tests (devnet)
+```bash
+anchor test
+```
+
 Build / deploy (after .env is set)
 ```bash
 anchor build
