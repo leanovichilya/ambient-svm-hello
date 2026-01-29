@@ -25,3 +25,5 @@ AGENTS.md
 .DS_Store
 .anchor/
 CONTEXT_WEEK4.md
+last_match_pda.txt
+last_champion_pubkey.txt

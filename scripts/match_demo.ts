@@ -1,6 +1,7 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { randomBytes } from "crypto";
+import { writeFile } from "fs/promises";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
@@ -188,6 +189,7 @@ async function main() {
 
   console.log("final_verdict:", (await fetchMatchState(program as any, matchPda)).match.verdict);
   console.log("match:", matchPda.toBase58());
+  await writeFile("last_match_pda.txt", `${matchPda.toBase58()}\n`, "utf8");
   const state = await fetchMatchState(program as any, matchPda);
   logMatchState(matchPda, state);
 }

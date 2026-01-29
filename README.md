@@ -30,6 +30,9 @@ Off-chain scripts
 - `scripts/execute_match.ts`, `scripts/read_match.ts`
 - `scripts/verify_match_receipt.ts` (checks prompt_hash consistency + receipt_root presence)
 - `scripts/tournament_demo.ts` (2 semifinals + final, prints champion)
+- `scripts/menu.sh` (interactive menu to run demos and checks)
+- `last_match_pda.txt` is written by demos for quick lookups
+- `last_champion_pubkey.txt` is written by tournament demo for quick lookups
 
 Env vars
 Copy `.env.example` to `.env` and fill in secrets. AMBIENT_API_KEY is required.

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { randomBytes } from "crypto";
+import { writeFile } from "fs/promises";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
@@ -217,6 +218,7 @@ async function main() {
   console.log("semi_final_2:", semi2.matchPda.toBase58());
   console.log("final_match:", finalMatch.matchPda.toBase58());
   console.log("champion:", finalMatch.winner?.toBase58() ?? "tie");
+  await writeFile("last_match_pda.txt", `${finalMatch.matchPda.toBase58()}\n`, "utf8");
 }
 
 main().catch((e) => {
