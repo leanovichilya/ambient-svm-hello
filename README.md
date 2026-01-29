@@ -44,11 +44,16 @@ Emergent behavior: provably fair economic agents enabled by verified inference +
      ```bash
      solana balance <PUBKEY> --url https://api.devnet.solana.com
      ```
-6) Build + deploy (after .env is set)
+  6) Build + deploy (after .env is set)
    - Commands:
      ```bash
      anchor build
      anchor deploy --no-idl
+     ```
+ 7) Run tests (anchor test)
+   - Command:
+     ```bash
+     anchor test
      ```
 q) Quit
 
