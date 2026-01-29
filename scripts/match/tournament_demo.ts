@@ -2,97 +2,21 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { writeFile } from "fs/promises";
 import { getProgram } from "../anchor";
-import { buildMatchPrompt } from "../prompts";
-import { fetchMatchState } from "./state";
 import {
   getModelIdOrExit,
   requireEnv,
-  sha256Bytes,
 } from "../utils";
 import {
-  createMatchAndReveal,
-  finalizeAndExecuteMatch,
   fundKeypairs,
-  runJudgesAndSubmit,
 } from "./helpers";
 import {
-  JUDGE_LAMPORTS,
-  MATCH_CHALLENGE_PERIOD_SLOTS,
-  MATCH_STAKE_LAMPORTS,
-} from "../constants";
-
-const MATCH_TYPE = 1;
-const FUND_PLAYER = 60_000_000;
-const JUDGES = 3;
-
-async function runMatch(
-  program: any,
-  playerA: anchor.web3.Keypair,
-  playerB: anchor.web3.Keypair,
-  criteria: string,
-  inputA: string,
-  inputB: string,
-  extra: string,
-  ambientApiKey: string,
-  modelId: string
-): Promise<{ matchPda: anchor.web3.PublicKey; winner: anchor.web3.PublicKey | null }> {
-  const provider = program.provider as anchor.AnchorProvider;
-
-  const nonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
-  const { matchPda } = await createMatchAndReveal({
-    program: program as any,
-    matchType: MATCH_TYPE,
-    criteria,
-    extra,
-    inputA,
-    inputB,
-    stakeLamports: MATCH_STAKE_LAMPORTS,
-    challengeSlots: MATCH_CHALLENGE_PERIOD_SLOTS,
-    nonce,
-    playerA: playerA.publicKey,
-    playerB: playerB.publicKey,
-    signerA: playerA,
-    signerB: playerB,
-  });
-
-  const prompt = buildMatchPrompt({
-    matchType: MATCH_TYPE,
-    criteria,
-    inputA,
-    inputB,
-    extra,
-    stakeLamports: MATCH_STAKE_LAMPORTS,
-  });
-  const promptHash = sha256Bytes(prompt);
-
-  const judges = Array.from({ length: JUDGES }, () => anchor.web3.Keypair.generate());
-  await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
-
-  await runJudgesAndSubmit(
-    program as any,
-    matchPda,
-    judges,
-    prompt,
-    promptHash,
-    modelId,
-    ambientApiKey
-  );
-
-  await finalizeAndExecuteMatch({
-    program: program as any,
-    matchPda,
-    playerA: playerA.publicKey,
-    playerB: playerB.publicKey,
-    judges: judges.map((j) => j.publicKey),
-    finalizer: (program.provider as anchor.AnchorProvider).wallet.publicKey,
-    executor: provider.wallet.publicKey,
-  });
-
-  const state = await fetchMatchState(program as any, matchPda);
-  const verdict = Number(state.match.verdict);
-  const winner = verdict === 1 ? playerA.publicKey : verdict === 2 ? playerB.publicKey : null;
-  return { matchPda, winner };
-}
+  MATCH_DEFAULT_CRITERIA,
+  MATCH_DEFAULT_EXTRA,
+  MATCH_DEFAULT_INPUT_A,
+  MATCH_DEFAULT_INPUT_B,
+  TOURNAMENT_FUND_PLAYER,
+} from "./config";
+import { runMatch } from "./run_match";
 
 async function main() {
   const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
@@ -100,12 +24,12 @@ async function main() {
   const { provider, program } = getProgram();
 
   const players = Array.from({ length: 4 }, () => anchor.web3.Keypair.generate());
-  await fundKeypairs(provider, players, FUND_PLAYER);
+  await fundKeypairs(provider, players, TOURNAMENT_FUND_PLAYER);
 
-  const criteria = "Pick the more concrete and feasible plan.";
-  const inputA = "Plan A: deliver MVP in 2 weeks with a small scope and clear milestones.";
-  const inputB = "Plan B: deliver full product in 2 weeks with no timeline details.";
-  const extra = "If insufficient info, return Tie.";
+  const criteria = MATCH_DEFAULT_CRITERIA;
+  const inputA = MATCH_DEFAULT_INPUT_A;
+  const inputB = MATCH_DEFAULT_INPUT_B;
+  const extra = MATCH_DEFAULT_EXTRA;
 
   const semi1 = await runMatch(
     program as any,

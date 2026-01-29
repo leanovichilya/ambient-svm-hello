@@ -20,12 +20,15 @@ import {
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
+  MATCH_DEFAULT_CRITERIA,
+  MATCH_DEFAULT_EXTRA,
+  MATCH_DEFAULT_INPUT_A,
+  MATCH_DEFAULT_INPUT_B,
+  MATCH_FUND_PLAYER_B,
+  MATCH_JUDGES,
   MATCH_STAKE_LAMPORTS,
-} from "../constants";
-
-const MATCH_TYPE = 1;
-const FUND_PLAYER_B = 2_000_000;
-const JUDGES = 3;
+  MATCH_TYPE,
+} from "./config";
 
 async function main() {
   const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
@@ -35,16 +38,16 @@ async function main() {
   const playerA = provider.wallet.publicKey;
 
   const playerB = anchor.web3.Keypair.generate();
-  await fundWallet(provider, playerB.publicKey, FUND_PLAYER_B);
+  await fundWallet(provider, playerB.publicKey, MATCH_FUND_PLAYER_B);
 
-  const judges = Array.from({ length: JUDGES }, () => anchor.web3.Keypair.generate());
+  const judges = Array.from({ length: MATCH_JUDGES }, () => anchor.web3.Keypair.generate());
   await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
 
   const nonce = new anchor.BN(Date.now());
-  const criteria = "Pick the more concrete and feasible plan.";
-  const inputA = "Plan A: deliver MVP in 2 weeks with a small scope and clear milestones.";
-  const inputB = "Plan B: deliver full product in 2 weeks with no timeline details.";
-  const extra = "If insufficient info, return Tie.";
+  const criteria = MATCH_DEFAULT_CRITERIA;
+  const inputA = MATCH_DEFAULT_INPUT_A;
+  const inputB = MATCH_DEFAULT_INPUT_B;
+  const extra = MATCH_DEFAULT_EXTRA;
 
   const { matchPda } = await createMatchAndReveal({
     program,
