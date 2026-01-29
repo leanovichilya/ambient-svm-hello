@@ -3,6 +3,16 @@
 ## Week 4 Scope
 Emergent behavior: provably fair economic agents enabled by verified inference + on-chain execution.
 
+## Requirements
+- Solana CLI installed and configured for devnet
+- Anchor CLI installed
+- Node.js 18+ with Yarn (corepack or global yarn)
+
+Install deps:
+```bash
+yarn install
+```
+
 ### Scenario
 Two players escrow stake. They commit to inputs, reveal them on-chain, then three AI judges submit receipts and a majority verdict is finalized. After a short challenge window (slot-based), on-chain execution pays out the winner (or refunds on tie). If only one player reveals by the deadline, that player wins; if neither reveals, it’s a tie refund. Judges post a small bond; minority judges are slashed to the winner.
 
