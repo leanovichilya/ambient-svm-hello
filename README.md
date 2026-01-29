@@ -52,10 +52,10 @@ cp .env.example .env
 ```
 Optional env validation:
 ```bash
-yarn ts-node scripts/validate_env.ts
+yarn node scripts/validate_env.cjs
 ```
 
-Build / deploy
+Build / deploy (after .env is set)
 ```bash
 anchor build
 anchor deploy --no-idl

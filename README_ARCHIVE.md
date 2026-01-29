@@ -147,7 +147,7 @@ cp .env.example .env
 ```
 Optional env validation:
 ```bash
-yarn ts-node scripts/validate_env.ts
+yarn node scripts/validate_env.cjs
 ```
 
 How to run (proposal summarizer)
