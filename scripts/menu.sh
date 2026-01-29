@@ -45,7 +45,12 @@ while true; do
         echo "Invalid pubkey"
         continue
       fi
-      yarn ts-node scripts/read_match.ts "$pda"
+      read -r -p "Short output? [y/N]: " short
+      if [[ "$short" == "y" || "$short" == "Y" ]]; then
+        yarn ts-node scripts/read_match.ts "$pda" --short
+      else
+        yarn ts-node scripts/read_match.ts "$pda"
+      fi
       ;;
     4)
       read -r -p "Match PDA (enter for last): " pda
