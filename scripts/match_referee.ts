@@ -2,7 +2,6 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
-import { ensureConfig } from "./config";
 import { buildMatchPrompt } from "./prompts";
 import { fetchMatchState } from "./match";
 import {
@@ -15,6 +14,7 @@ import {
   sha256Bytes,
   usage,
 } from "./utils";
+import { JUDGE_LAMPORTS } from "./constants";
 
 function parseWinner(text: string): number {
   const parsed: any = parseJsonBlock(text);
@@ -31,8 +31,7 @@ async function main() {
   const MODEL_ID = getModelIdOrExit();
 
   const { provider, program } = getProgram();
-  const relayer = provider.wallet.publicKey;
-  await ensureConfig(program as any, relayer);
+  const payer = provider.wallet.publicKey;
 
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const state = await fetchMatchState(program as any, matchPda);
@@ -40,6 +39,10 @@ async function main() {
 
   if (m.status !== 0) {
     console.error(`Match already finalized. status=${m.status}`);
+    process.exit(1);
+  }
+  if (Number(m.revealedA) !== 1 || Number(m.revealedB) !== 1) {
+    console.error("Match inputs not revealed yet");
     process.exit(1);
   }
 
@@ -72,18 +75,27 @@ async function main() {
   }
 
   const verdict = parseWinner(responseText);
-
+  const judge = anchor.web3.Keypair.generate();
+  const fundTx = new anchor.web3.Transaction().add(
+    anchor.web3.SystemProgram.transfer({
+      fromPubkey: payer,
+      toPubkey: judge.publicKey,
+      lamports: JUDGE_LAMPORTS,
+    })
+  );
+  await provider.sendAndConfirm(fundTx, []);
   await program.methods
-    .finalizeMatch(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
+    .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
     .accounts({
       gameMatch: matchPda,
-      relayer,
+      judge: judge.publicKey,
     })
+    .signers([judge])
     .rpc();
 
   console.log("match:", matchPda.toBase58());
   console.log("verdict:", verdict);
-  logReceipt("referee", receiptPresent, receiptRootBytes);
+  logReceipt("judge", receiptPresent, receiptRootBytes);
 }
 
 main().catch((e) => {

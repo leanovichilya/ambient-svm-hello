@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
+use sha2::{Digest, Sha256};
 
 
 declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
@@ -14,6 +15,9 @@ const MAX_GOV_PROPOSAL_TEXT_LEN: usize = 512;
 const MAX_REVISION_TEXT_LEN: usize = 512;
 const ACTION_LAMPORTS: u64 = 1_000_000;
 const MAX_MATCH_EXTRA_LEN: usize = 512;
+const MAX_MATCH_SALT_LEN: usize = 64;
+const MATCH_REVEAL_WINDOW_SECS: i64 = 600;
+const MATCH_CHALLENGE_PERIOD_SECS: i64 = 5;
 
 #[program]
 pub mod ambient_svm_hello {
@@ -365,23 +369,15 @@ pub mod ambient_svm_hello {
         ctx: Context<CreateMatch>,
         match_type: u8,
         criteria: String,
-        input_a: String,
-        input_b: String,
         extra: String,
+        commit_a: [u8; 32],
+        commit_b: [u8; 32],
         stake_lamports: u64,
         nonce: u64,
     ) -> Result<()> {
         require!(match_type >= 1 && match_type <= 3, ErrorCode::BadMatchType);
         require!(
             criteria.as_bytes().len() <= MAX_CRITERIA_LEN,
-            ErrorCode::MatchTextTooLong
-        );
-        require!(
-            input_a.as_bytes().len() <= MAX_INPUT_LEN,
-            ErrorCode::MatchTextTooLong
-        );
-        require!(
-            input_b.as_bytes().len() <= MAX_INPUT_LEN,
             ErrorCode::MatchTextTooLong
         );
         require!(
@@ -429,6 +425,7 @@ pub mod ambient_svm_hello {
         );
         system_program::transfer(cpi_ctx_b, stake_lamports)?;
 
+        let now = Clock::get()?.unix_timestamp;
         let m = &mut ctx.accounts.game_match;
         m.player_a = ctx.accounts.player_a.key();
         m.player_b = ctx.accounts.player_b.key();
@@ -441,39 +438,120 @@ pub mod ambient_svm_hello {
         m.receipt_root = [0u8; 32];
         m.model_id = String::new();
         m.criteria = criteria;
-        m.input_a = input_a;
-        m.input_b = input_b;
+        m.input_a = String::new();
+        m.input_b = String::new();
         m.extra = extra;
         m.executor = Pubkey::default();
+        m.commit_a = commit_a;
+        m.commit_b = commit_b;
+        m.revealed_a = 0;
+        m.revealed_b = 0;
+        m.reveal_deadline = now + MATCH_REVEAL_WINDOW_SECS;
+        m.finalized_at = 0;
+        m.execute_after = 0;
+        m.judge_a = 0;
+        m.judge_b = 0;
+        m.judge_tie = 0;
 
         Ok(())
     }
 
-    pub fn finalize_match(
-        ctx: Context<FinalizeMatch>,
+    pub fn reveal_match_input(
+        ctx: Context<RevealMatchInput>,
+        input: String,
+        salt: Vec<u8>,
+    ) -> Result<()> {
+        require!(
+            input.as_bytes().len() <= MAX_INPUT_LEN,
+            ErrorCode::MatchTextTooLong
+        );
+        require!(salt.len() <= MAX_MATCH_SALT_LEN, ErrorCode::SaltTooLong);
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
+        let now = Clock::get()?.unix_timestamp;
+        require!(now <= m.reveal_deadline, ErrorCode::RevealWindowExpired);
+        let player = ctx.accounts.player.key();
+        let mut hasher = Sha256::new();
+        hasher.update(b"match");
+        hasher.update(input.as_bytes());
+        hasher.update(salt.as_slice());
+        let commit: [u8; 32] = hasher.finalize().into();
+
+        if player == m.player_a {
+            require!(m.revealed_a == 0, ErrorCode::AlreadyRevealed);
+            require!(commit == m.commit_a, ErrorCode::BadCommitment);
+            m.input_a = input;
+            m.revealed_a = 1;
+        } else if player == m.player_b {
+            require!(m.revealed_b == 0, ErrorCode::AlreadyRevealed);
+            require!(commit == m.commit_b, ErrorCode::BadCommitment);
+            m.input_b = input;
+            m.revealed_b = 1;
+        } else {
+            return err!(ErrorCode::BadMatchPlayer);
+        }
+        Ok(())
+    }
+
+    pub fn submit_match_judge_result(
+        ctx: Context<SubmitMatchJudgeResult>,
         verdict: u8,
         receipt_root: [u8; 32],
         prompt_hash: [u8; 32],
         model_id: String,
     ) -> Result<()> {
-        require_keys_eq!(
-            ctx.accounts.config.relayer,
-            ctx.accounts.relayer.key(),
-            ErrorCode::BadRelayer
-        );
-        let m = &mut ctx.accounts.game_match;
-        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
         require!(verdict >= 1 && verdict <= 3, ErrorCode::BadMatchVerdict);
         require!(
             model_id.as_bytes().len() <= MAX_MODEL_ID_LEN,
             ErrorCode::ModelIdTooLong
         );
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
+        require!(m.revealed_a == 1 && m.revealed_b == 1, ErrorCode::MatchNotRevealed);
+        let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
+        require!(total < 3, ErrorCode::TooManyJudges);
 
-        m.verdict = verdict;
-        m.receipt_root = receipt_root;
+        if verdict == 1 {
+            m.judge_a = m.judge_a.saturating_add(1);
+        } else if verdict == 2 {
+            m.judge_b = m.judge_b.saturating_add(1);
+        } else {
+            m.judge_tie = m.judge_tie.saturating_add(1);
+        }
+
         m.prompt_hash = prompt_hash;
-        m.model_id = model_id;
+        m.receipt_root = receipt_root;
+        m.model_id = model_id.clone();
+
+        let r = &mut ctx.accounts.match_judge;
+        r.match_key = m.key();
+        r.judge = ctx.accounts.judge.key();
+        r.verdict = verdict;
+        r.receipt_root = receipt_root;
+        r.prompt_hash = prompt_hash;
+        r.model_id = model_id;
+
+        Ok(())
+    }
+
+    pub fn finalize_match(ctx: Context<FinalizeMatch>) -> Result<()> {
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
+        let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
+        require!(total == 3, ErrorCode::NotEnoughJudges);
+
+        let verdict = if m.judge_a >= 2 {
+            1
+        } else if m.judge_b >= 2 {
+            2
+        } else {
+            3
+        };
+        let now = Clock::get()?.unix_timestamp;
+        m.verdict = verdict;
         m.status = 1;
+        m.finalized_at = now;
+        m.execute_after = now + MATCH_CHALLENGE_PERIOD_SECS;
 
         Ok(())
     }
@@ -481,6 +559,8 @@ pub mod ambient_svm_hello {
     pub fn execute_match(ctx: Context<ExecuteMatch>) -> Result<()> {
         let m = &mut ctx.accounts.game_match;
         require!(m.status == 1, ErrorCode::MatchNotFinalized);
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= m.execute_after, ErrorCode::ChallengePeriodActive);
         require_keys_eq!(m.player_a, ctx.accounts.player_a.key(), ErrorCode::BadMatchPlayer);
         require_keys_eq!(m.player_b, ctx.accounts.player_b.key(), ErrorCode::BadMatchPlayer);
 
@@ -787,7 +867,7 @@ pub struct CompleteAction<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(match_type: u8, criteria: String, input_a: String, input_b: String, extra: String, stake_lamports: u64, nonce: u64)]
+#[instruction(match_type: u8, criteria: String, extra: String, commit_a: [u8; 32], commit_b: [u8; 32], stake_lamports: u64, nonce: u64)]
 pub struct CreateMatch<'info> {
     #[account(
         init,
@@ -812,15 +892,35 @@ pub struct CreateMatch<'info> {
 }
 
 #[derive(Accounts)]
-pub struct FinalizeMatch<'info> {
-    #[account(
-        seeds = [b"config"],
-        bump
-    )]
-    pub config: Account<'info, Config>,
+pub struct RevealMatchInput<'info> {
     #[account(mut)]
     pub game_match: Account<'info, Match>,
-    pub relayer: Signer<'info>,
+    #[account(mut)]
+    pub player: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SubmitMatchJudgeResult<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    #[account(
+        init,
+        payer = judge,
+        space = MatchJudgeResult::space(),
+        seeds = [b"match_judge", game_match.key().as_ref(), judge.key().as_ref()],
+        bump
+    )]
+    pub match_judge: Account<'info, MatchJudgeResult>,
+    #[account(mut)]
+    pub judge: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FinalizeMatch<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    pub finalizer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -1059,6 +1159,16 @@ pub struct Match {
     pub input_b: String,
     pub extra: String,
     pub executor: Pubkey,
+    pub commit_a: [u8; 32],
+    pub commit_b: [u8; 32],
+    pub revealed_a: u8,
+    pub revealed_b: u8,
+    pub reveal_deadline: i64,
+    pub finalized_at: i64,
+    pub execute_after: i64,
+    pub judge_a: u8,
+    pub judge_b: u8,
+    pub judge_tie: u8,
 }
 
 impl Match {
@@ -1079,6 +1189,38 @@ impl Match {
         + 4 + MAX_INPUT_LEN
         + 4 + MAX_MATCH_EXTRA_LEN
         + 32
+        + 32
+        + 32
+        + 1
+        + 1
+        + 8
+        + 8
+        + 8
+        + 1
+        + 1
+        + 1
+    }
+}
+
+#[account]
+pub struct MatchJudgeResult {
+    pub match_key: Pubkey,
+    pub judge: Pubkey,
+    pub verdict: u8,
+    pub receipt_root: [u8; 32],
+    pub prompt_hash: [u8; 32],
+    pub model_id: String,
+}
+
+impl MatchJudgeResult {
+    pub fn space() -> usize {
+        8
+        + 32
+        + 32
+        + 1
+        + 32
+        + 32
+        + 4 + MAX_MODEL_ID_LEN
     }
 }
 
@@ -1136,10 +1278,22 @@ pub enum ErrorCode {
     MatchAlreadyFinalized,
     #[msg("Match not finalized")]
     MatchNotFinalized,
+    #[msg("Match not revealed")]
+    MatchNotRevealed,
     #[msg("Bad match verdict")]
     BadMatchVerdict,
     #[msg("Bad match player")]
     BadMatchPlayer,
     #[msg("Escrow balance too low")]
     EscrowBalanceLow,
+    #[msg("Bad commitment")]
+    BadCommitment,
+    #[msg("Reveal window expired")]
+    RevealWindowExpired,
+    #[msg("Already revealed")]
+    AlreadyRevealed,
+    #[msg("Salt too long")]
+    SaltTooLong,
+    #[msg("Challenge period active")]
+    ChallengePeriodActive,
 }

@@ -1,10 +1,10 @@
-export const DEFAULT_MODEL_ID = "ambient-1";
+export const DEFAULT_MODEL_ID = "zai-org/GLM-4.6";
 export const MAX_MODEL_ID_LEN = 64;
 
 export const ACTION_LAMPORTS = 1_000_000;
 export const TREASURY_FUND_LAMPORTS = 2_000_000;
 export const TREASURY_TOPUP_LAMPORTS = 2_000_000;
-export const JUDGE_LAMPORTS = 2_000_000;
+export const JUDGE_LAMPORTS = 5_000_000;
 
 export const MAX_SUMMARY_WORDS = 60;
 export const MAX_SUMMARY_CHARS = 400;

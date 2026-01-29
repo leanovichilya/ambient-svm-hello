@@ -1,4 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
+import { createHash } from "crypto";
 
 export function getMatchPda(
   programId: anchor.web3.PublicKey,
@@ -21,6 +22,26 @@ export function getMatchEscrowPda(
     programId
   );
   return escrowPda;
+}
+
+export function getMatchJudgePda(
+  programId: anchor.web3.PublicKey,
+  matchPda: anchor.web3.PublicKey,
+  judge: anchor.web3.PublicKey
+): anchor.web3.PublicKey {
+  const [judgePda] = anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("match_judge"), matchPda.toBuffer(), judge.toBuffer()],
+    programId
+  );
+  return judgePda;
+}
+
+export function commitMatchInput(input: string, salt: Buffer): number[] {
+  const hash = createHash("sha256");
+  hash.update(Buffer.from("match"));
+  hash.update(Buffer.from(input, "utf8"));
+  hash.update(salt);
+  return Array.from(hash.digest());
 }
 
 export async function fetchMatchState(
@@ -58,6 +79,16 @@ export function logMatchState(
   console.log("input_a:", match.inputA);
   console.log("input_b:", match.inputB);
   console.log("extra:", match.extra);
+  console.log("commit_a:", Buffer.from(match.commitA).toString("hex"));
+  console.log("commit_b:", Buffer.from(match.commitB).toString("hex"));
+  console.log("revealed_a:", match.revealedA);
+  console.log("revealed_b:", match.revealedB);
+  console.log("reveal_deadline:", match.revealDeadline.toString());
+  console.log("finalized_at:", match.finalizedAt.toString());
+  console.log("execute_after:", match.executeAfter.toString());
+  console.log("judge_a:", match.judgeA);
+  console.log("judge_b:", match.judgeB);
+  console.log("judge_tie:", match.judgeTie);
   console.log("executor:", match.executor.toBase58());
   console.log("escrow:", escrowPda.toBase58());
   console.log("escrow_lamports:", escrowLamports);
