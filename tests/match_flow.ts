@@ -8,7 +8,7 @@ import { commitMatchInput, getMatchPda } from "../scripts/match/state";
 const STAKE_LAMPORTS = 1_000_000;
 const CHALLENGE_SLOTS = 2;
 const FUND_PLAYER_B = 2_000_000;
-const FUND_JUDGE = 3_000_000;
+const FUND_JUDGE = 5_000_000;
 
 async function fundWallet(
   provider: anchor.AnchorProvider,
