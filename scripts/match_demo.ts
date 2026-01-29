@@ -2,20 +2,17 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { randomBytes } from "crypto";
 import { writeFile } from "fs/promises";
-import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
 import { commitMatchInput, fetchMatchState, getMatchPda, logMatchState } from "./match";
 import {
   getModelIdOrExit,
   logReceipt,
-  normalizeWinner,
-  parseJsonBlock,
   requireEnv,
   sha256Bytes,
 } from "./utils";
+import { fundWallet, getAmbientJudgeResult, waitForExecuteSlot } from "./match_helpers";
 import {
-  JUDGE_BOND_LAMPORTS,
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
   MATCH_STAKE_LAMPORTS,
@@ -24,29 +21,6 @@ import {
 const MATCH_TYPE = 1;
 const FUND_PLAYER_B = 2_000_000;
 const JUDGES = 3;
-
-async function fundWallet(
-  provider: anchor.AnchorProvider,
-  to: anchor.web3.PublicKey,
-  lamports: number
-) {
-  const tx = new anchor.web3.Transaction().add(
-    anchor.web3.SystemProgram.transfer({
-      fromPubkey: provider.wallet.publicKey,
-      toPubkey: to,
-      lamports,
-    })
-  );
-  await provider.sendAndConfirm(tx, []);
-}
-
-function parseWinner(text: string): number {
-  const parsed: any = parseJsonBlock(text);
-  if (!parsed?.winner) {
-    throw new Error("Missing winner in model response");
-  }
-  return normalizeWinner(String(parsed.winner));
-}
 
 async function main() {
   const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
@@ -121,23 +95,11 @@ async function main() {
 
   const promptHash = sha256Bytes(prompt);
   for (let i = 0; i < judges.length; i += 1) {
-    let ambientResult;
-    try {
-      ambientResult = await callAmbient(prompt, MODEL_ID, AMBIENT_API_KEY, { retries: 0 });
-    } catch (e) {
-      if (e instanceof AmbientApiError && (e.status === 429 || e.status === 500)) {
-        console.error(`Ambient API ${e.status}`);
-        process.exit(1);
-      }
-      throw e;
-    }
-
-    const { responseText, receiptRootBytes, receiptPresent } = ambientResult;
-    if (!responseText) {
-      console.error("Empty model response");
-      process.exit(1);
-    }
-    const verdict = parseWinner(responseText);
+    const { verdict, receiptRootBytes, receiptPresent } = await getAmbientJudgeResult(
+      prompt,
+      MODEL_ID,
+      AMBIENT_API_KEY
+    );
     const judge = judges[i];
     await program.methods
       .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
@@ -160,19 +122,7 @@ async function main() {
     })
     .rpc();
 
-  for (let i = 0; i < 5; i += 1) {
-    const state = await fetchMatchState(program as any, matchPda);
-    const executeAfterRaw = state.match.executeAfterSlot;
-    const executeAfter =
-      typeof executeAfterRaw?.toNumber === "function"
-        ? executeAfterRaw.toNumber()
-        : Number(executeAfterRaw ?? 0);
-    const slot = await provider.connection.getSlot();
-    if (slot >= executeAfter) {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
+  await waitForExecuteSlot(program, matchPda);
 
   await program.methods
     .executeMatch()

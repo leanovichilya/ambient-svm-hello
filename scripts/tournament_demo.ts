@@ -2,7 +2,6 @@ import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { randomBytes } from "crypto";
 import { writeFile } from "fs/promises";
-import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
 import {
@@ -12,11 +11,10 @@ import {
 } from "./match";
 import {
   getModelIdOrExit,
-  normalizeWinner,
-  parseJsonBlock,
   requireEnv,
   sha256Bytes,
 } from "./utils";
+import { fundWallet, getAmbientJudgeResult, waitForExecuteSlot } from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
@@ -26,29 +24,6 @@ import {
 const MATCH_TYPE = 1;
 const FUND_PLAYER = 60_000_000;
 const JUDGES = 3;
-
-async function fundWallet(
-  provider: anchor.AnchorProvider,
-  to: anchor.web3.PublicKey,
-  lamports: number
-) {
-  const tx = new anchor.web3.Transaction().add(
-    anchor.web3.SystemProgram.transfer({
-      fromPubkey: provider.wallet.publicKey,
-      toPubkey: to,
-      lamports,
-    })
-  );
-  await provider.sendAndConfirm(tx, []);
-}
-
-function parseWinner(text: string): number {
-  const parsed: any = parseJsonBlock(text);
-  if (!parsed?.winner) {
-    throw new Error("Missing winner in model response");
-  }
-  return normalizeWinner(String(parsed.winner));
-}
 
 async function runMatch(
   program: any,
@@ -123,21 +98,11 @@ async function runMatch(
   }
 
   for (const judge of judges) {
-    let ambientResult;
-    try {
-      ambientResult = await callAmbient(prompt, MODEL_ID, AMBIENT_API_KEY, { retries: 0 });
-    } catch (e) {
-      if (e instanceof AmbientApiError && (e.status === 429 || e.status === 500)) {
-        console.error(`Ambient API ${e.status}`);
-        process.exit(1);
-      }
-      throw e;
-    }
-    const { responseText, receiptRootBytes } = ambientResult;
-    if (!responseText) {
-      throw new Error("Empty model response");
-    }
-    const verdict = parseWinner(responseText);
+    const { verdict, receiptRootBytes } = await getAmbientJudgeResult(
+      prompt,
+      MODEL_ID,
+      AMBIENT_API_KEY
+    );
     await (program as any).methods
       .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
       .accounts({
@@ -156,17 +121,7 @@ async function runMatch(
     })
     .rpc();
 
-  for (let i = 0; i < 5; i += 1) {
-    const state = await fetchMatchState(program as any, matchPda);
-    const executeAfterRaw = state.match.executeAfterSlot;
-    const executeAfter =
-      typeof executeAfterRaw?.toNumber === "function"
-        ? executeAfterRaw.toNumber()
-        : Number(executeAfterRaw ?? 0);
-    const slot = await provider.connection.getSlot();
-    if (slot >= executeAfter) break;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
+  await waitForExecuteSlot(program, matchPda);
 
   await (program as any).methods
     .executeMatch()

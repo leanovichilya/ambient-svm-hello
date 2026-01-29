@@ -1,6 +1,5 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
-import { AmbientApiError, callAmbient } from "./ambient";
 import { getProgram } from "./anchor";
 import { buildMatchPrompt } from "./prompts";
 import { fetchMatchState } from "./match";
@@ -8,21 +7,12 @@ import {
   getArgOrExit,
   getModelIdOrExit,
   logReceipt,
-  normalizeWinner,
-  parseJsonBlock,
   requireEnv,
   sha256Bytes,
   usage,
 } from "./utils";
 import { JUDGE_LAMPORTS } from "./constants";
-
-function parseWinner(text: string): number {
-  const parsed: any = parseJsonBlock(text);
-  if (!parsed?.winner) {
-    throw new Error("Missing winner in model response");
-  }
-  return normalizeWinner(String(parsed.winner));
-}
+import { fundWallet, getAmbientJudgeResult } from "./match_helpers";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("match_referee.ts", "<MATCH_PDA>"));
@@ -31,7 +21,6 @@ async function main() {
   const MODEL_ID = getModelIdOrExit();
 
   const { provider, program } = getProgram();
-  const payer = provider.wallet.publicKey;
 
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const state = await fetchMatchState(program as any, matchPda);
@@ -57,33 +46,13 @@ async function main() {
 
   const promptHash = sha256Bytes(prompt);
 
-  let ambientResult;
-  try {
-    ambientResult = await callAmbient(prompt, MODEL_ID, AMBIENT_API_KEY, { retries: 0 });
-  } catch (e) {
-    if (e instanceof AmbientApiError && (e.status === 429 || e.status === 500)) {
-      console.error(`Ambient API ${e.status}`);
-      process.exit(1);
-    }
-    throw e;
-  }
-
-  const { responseText, receiptRootBytes, receiptPresent } = ambientResult;
-  if (!responseText) {
-    console.error("Empty model response");
-    process.exit(1);
-  }
-
-  const verdict = parseWinner(responseText);
-  const judge = anchor.web3.Keypair.generate();
-  const fundTx = new anchor.web3.Transaction().add(
-    anchor.web3.SystemProgram.transfer({
-      fromPubkey: payer,
-      toPubkey: judge.publicKey,
-      lamports: JUDGE_LAMPORTS,
-    })
+  const { verdict, receiptRootBytes, receiptPresent } = await getAmbientJudgeResult(
+    prompt,
+    MODEL_ID,
+    AMBIENT_API_KEY
   );
-  await provider.sendAndConfirm(fundTx, []);
+  const judge = anchor.web3.Keypair.generate();
+  await fundWallet(provider, judge.publicKey, JUDGE_LAMPORTS);
   await program.methods
     .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
     .accounts({
