@@ -3,15 +3,29 @@ set -euo pipefail
 
 while true; do
   echo "Select an action:"
+  echo "0) Install dependencies (apt + yarn)"
   echo "1) Run match demo"
   echo "2) Run tournament demo"
   echo "3) Read match state (uses last_match_pda.txt if empty)"
   echo "4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)"
   echo "5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)"
+  echo "6) Build + deploy (after .env is set)"
   echo "q) Quit"
   read -r -p "> " choice
 
   case "$choice" in
+    0)
+      sudo apt update
+      sudo apt install -y curl build-essential pkg-config libssl-dev
+      if command -v corepack >/dev/null 2>&1; then
+        corepack enable
+      fi
+      if [[ ! -f .env && -f .env.example ]]; then
+        cp .env.example .env
+        echo "Created .env from .env.example"
+      fi
+      yarn install
+      ;;
     1)
       yarn ts-node scripts/match_demo.ts
       ;;
@@ -62,6 +76,10 @@ while true; do
         continue
       fi
       solana balance "$pubkey" --url https://api.devnet.solana.com
+      ;;
+    6)
+      anchor build
+      anchor deploy --no-idl
       ;;
     q)
       exit 0
