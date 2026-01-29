@@ -1,9 +1,9 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
-import { buildMatchPrompt } from "./prompts";
 import { fetchMatchState } from "./match";
 import { getArgOrExit, sha256Bytes, usage } from "./utils";
+import { buildPromptFromMatch } from "./match_helpers";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("verify_match_receipt.ts", "<MATCH_PDA>"));
@@ -12,14 +12,7 @@ async function main() {
   const state = await fetchMatchState(program as any, matchPda);
   const m = state.match;
 
-  const prompt = buildMatchPrompt({
-    matchType: Number(m.matchType),
-    criteria: String(m.criteria || ""),
-    inputA: String(m.inputA || ""),
-    inputB: String(m.inputB || ""),
-    extra: String(m.extra || ""),
-    stakeLamports: Number(m.stakeLamports || 0),
-  });
+  const prompt = buildPromptFromMatch(m);
   const computedHash = Buffer.from(sha256Bytes(prompt)).toString("hex");
   const onchainHash = Buffer.from(m.promptHash).toString("hex");
   const receiptRoot = Buffer.from(m.receiptRoot).toString("hex");

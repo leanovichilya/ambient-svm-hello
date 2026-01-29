@@ -11,7 +11,12 @@ import {
   requireEnv,
   sha256Bytes,
 } from "./utils";
-import { fundWallet, getAmbientJudgeResult, waitForExecuteSlot } from "./match_helpers";
+import {
+  fundKeypairs,
+  fundWallet,
+  getAmbientJudgeResult,
+  waitForExecuteSlot,
+} from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
@@ -33,9 +38,7 @@ async function main() {
   await fundWallet(provider, playerB.publicKey, FUND_PLAYER_B);
 
   const judges = Array.from({ length: JUDGES }, () => anchor.web3.Keypair.generate());
-  for (const judge of judges) {
-    await fundWallet(provider, judge.publicKey, JUDGE_LAMPORTS);
-  }
+  await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
 
   const nonce = new anchor.BN(Date.now());
   const matchPda = getMatchPda(program.programId, playerA, nonce);
@@ -137,10 +140,10 @@ async function main() {
     })
     .rpc();
 
-  console.log("final_verdict:", (await fetchMatchState(program as any, matchPda)).match.verdict);
+  const state = await fetchMatchState(program as any, matchPda);
+  console.log("final_verdict:", state.match.verdict);
   console.log("match:", matchPda.toBase58());
   await writeFile("last_match_pda.txt", `${matchPda.toBase58()}\n`, "utf8");
-  const state = await fetchMatchState(program as any, matchPda);
   logMatchState(matchPda, state);
 }
 

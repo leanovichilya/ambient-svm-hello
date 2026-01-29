@@ -14,7 +14,7 @@ import {
   requireEnv,
   sha256Bytes,
 } from "./utils";
-import { fundWallet, getAmbientJudgeResult, waitForExecuteSlot } from "./match_helpers";
+import { fundKeypairs, getAmbientJudgeResult, waitForExecuteSlot } from "./match_helpers";
 import {
   JUDGE_LAMPORTS,
   MATCH_CHALLENGE_PERIOD_SLOTS,
@@ -32,10 +32,10 @@ async function runMatch(
   criteria: string,
   inputA: string,
   inputB: string,
-  extra: string
+  extra: string,
+  ambientApiKey: string,
+  modelId: string
 ): Promise<{ matchPda: anchor.web3.PublicKey; winner: anchor.web3.PublicKey | null }> {
-  const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
-  const MODEL_ID = getModelIdOrExit();
   const provider = program.provider as anchor.AnchorProvider;
 
   const nonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
@@ -93,18 +93,16 @@ async function runMatch(
   const promptHash = sha256Bytes(prompt);
 
   const judges = Array.from({ length: JUDGES }, () => anchor.web3.Keypair.generate());
-  for (const judge of judges) {
-    await fundWallet(provider, judge.publicKey, JUDGE_LAMPORTS);
-  }
+  await fundKeypairs(provider, judges, JUDGE_LAMPORTS);
 
   for (const judge of judges) {
     const { verdict, receiptRootBytes } = await getAmbientJudgeResult(
       prompt,
-      MODEL_ID,
-      AMBIENT_API_KEY
+      modelId,
+      ambientApiKey
     );
     await (program as any).methods
-      .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, MODEL_ID)
+      .submitMatchJudgeResult(verdict, receiptRootBytes as any, promptHash as any, modelId)
       .accounts({
         gameMatch: matchPda,
         judge: judge.publicKey,
@@ -143,22 +141,40 @@ async function runMatch(
 }
 
 async function main() {
-  requireEnv("AMBIENT_API_KEY");
-  getModelIdOrExit();
+  const AMBIENT_API_KEY = requireEnv("AMBIENT_API_KEY");
+  const MODEL_ID = getModelIdOrExit();
   const { provider, program } = getProgram();
 
   const players = Array.from({ length: 4 }, () => anchor.web3.Keypair.generate());
-  for (const p of players) {
-    await fundWallet(provider, p.publicKey, FUND_PLAYER);
-  }
+  await fundKeypairs(provider, players, FUND_PLAYER);
 
   const criteria = "Pick the more concrete and feasible plan.";
   const inputA = "Plan A: deliver MVP in 2 weeks with a small scope and clear milestones.";
   const inputB = "Plan B: deliver full product in 2 weeks with no timeline details.";
   const extra = "If insufficient info, return Tie.";
 
-  const semi1 = await runMatch(program as any, players[0], players[1], criteria, inputA, inputB, extra);
-  const semi2 = await runMatch(program as any, players[2], players[3], criteria, inputA, inputB, extra);
+  const semi1 = await runMatch(
+    program as any,
+    players[0],
+    players[1],
+    criteria,
+    inputA,
+    inputB,
+    extra,
+    AMBIENT_API_KEY,
+    MODEL_ID
+  );
+  const semi2 = await runMatch(
+    program as any,
+    players[2],
+    players[3],
+    criteria,
+    inputA,
+    inputB,
+    extra,
+    AMBIENT_API_KEY,
+    MODEL_ID
+  );
 
   if (!semi1.winner || !semi2.winner) {
     console.log("Tournament ended in a tie in semifinals.");
@@ -167,7 +183,17 @@ async function main() {
 
   const winner1 = anchor.web3.Keypair.fromSecretKey(players.find((p) => p.publicKey.equals(semi1.winner))!.secretKey);
   const winner2 = anchor.web3.Keypair.fromSecretKey(players.find((p) => p.publicKey.equals(semi2.winner))!.secretKey);
-  const finalMatch = await runMatch(program as any, winner1, winner2, criteria, inputA, inputB, extra);
+  const finalMatch = await runMatch(
+    program as any,
+    winner1,
+    winner2,
+    criteria,
+    inputA,
+    inputB,
+    extra,
+    AMBIENT_API_KEY,
+    MODEL_ID
+  );
 
   console.log("semi_final_1:", semi1.matchPda.toBase58());
   console.log("semi_final_2:", semi2.matchPda.toBase58());

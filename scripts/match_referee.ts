@@ -1,7 +1,6 @@
 import "dotenv/config";
 import * as anchor from "@coral-xyz/anchor";
 import { getProgram } from "./anchor";
-import { buildMatchPrompt } from "./prompts";
 import { fetchMatchState } from "./match";
 import {
   getArgOrExit,
@@ -12,7 +11,7 @@ import {
   usage,
 } from "./utils";
 import { JUDGE_LAMPORTS } from "./constants";
-import { fundWallet, getAmbientJudgeResult } from "./match_helpers";
+import { buildPromptFromMatch, fundWallet, getAmbientJudgeResult } from "./match_helpers";
 
 async function main() {
   const matchPdaStr = getArgOrExit(usage("match_referee.ts", "<MATCH_PDA>"));
@@ -35,14 +34,7 @@ async function main() {
     process.exit(1);
   }
 
-  const prompt = buildMatchPrompt({
-    matchType: Number(m.matchType),
-    criteria: String(m.criteria || ""),
-    inputA: String(m.inputA || ""),
-    inputB: String(m.inputB || ""),
-    extra: String(m.extra || ""),
-    stakeLamports: Number(m.stakeLamports || 0),
-  });
+  const prompt = buildPromptFromMatch(m);
 
   const promptHash = sha256Bytes(prompt);
 

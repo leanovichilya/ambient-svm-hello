@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { AmbientApiError, callAmbient } from "./ambient";
 import { fetchMatchState } from "./match";
+import { buildMatchPrompt } from "./prompts";
 import { normalizeWinner, parseJsonBlock } from "./utils";
 
 export async function fundWallet(
@@ -18,12 +19,33 @@ export async function fundWallet(
   await provider.sendAndConfirm(tx, []);
 }
 
+export async function fundKeypairs(
+  provider: anchor.AnchorProvider,
+  keypairs: anchor.web3.Keypair[],
+  lamports: number
+) {
+  for (const kp of keypairs) {
+    await fundWallet(provider, kp.publicKey, lamports);
+  }
+}
+
 export function parseWinner(text: string): number {
   const parsed: any = parseJsonBlock(text);
   if (!parsed?.winner) {
     throw new Error("Missing winner in model response");
   }
   return normalizeWinner(String(parsed.winner));
+}
+
+export function buildPromptFromMatch(match: any): string {
+  return buildMatchPrompt({
+    matchType: Number(match.matchType),
+    criteria: String(match.criteria || ""),
+    inputA: String(match.inputA || ""),
+    inputB: String(match.inputB || ""),
+    extra: String(match.extra || ""),
+    stakeLamports: Number(match.stakeLamports || 0),
+  });
 }
 
 export async function getAmbientJudgeResult(
