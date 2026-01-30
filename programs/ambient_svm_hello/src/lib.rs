@@ -3,7 +3,7 @@ use anchor_lang::system_program;
 use sha2::{Digest, Sha256};
 
 
-declare_id!("F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu");
+declare_id!("D7qtpBkxFBck6WtnfrcFaf9EnaErg2nfZsTAvRvmCpVW");
 
 const MAX_CRITERIA_LEN: usize = 512;
 const MAX_INPUT_LEN: usize = 512;

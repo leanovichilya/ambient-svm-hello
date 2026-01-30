@@ -6,14 +6,18 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-ambient_svm_hello = "F8ScaDMtYwunu5Xx1geVDPoVon5C4PyjaTsoFbAdCkhu"
+ambient_svm_hello = "D7qtpBkxFBck6WtnfrcFaf9EnaErg2nfZsTAvRvmCpVW"
+
+[programs.devnet]
+ambient_svm_hello = "D7qtpBkxFBck6WtnfrcFaf9EnaErg2nfZsTAvRvmCpVW"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "devnet"
-wallet = "/home/crypto/.config/solana/id_ambient.json"
+wallet = "/home/crypto/.config/solana/ambient-id-home.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+
