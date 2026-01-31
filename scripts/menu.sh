@@ -8,7 +8,7 @@ while true; do
   echo "2) Run tournament demo"
   echo "3) Read match state (uses last_match_pda.txt if empty)"
   echo "4) Verify prompt_hash + receipt_root (uses last_match_pda.txt if empty)"
-  echo "5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)"
+  echo "5) Check champion balance (testnet) (uses last_champion_pubkey.txt if empty)"
   echo "6) Build + deploy (after .env is set)"
   echo "7) Run tests (anchor test)"
   echo "q) Quit"
@@ -81,7 +81,7 @@ while true; do
         echo "Invalid pubkey"
         continue
       fi
-      solana balance "$pubkey" --url https://api.devnet.solana.com
+      solana balance "$pubkey" --url https://api.testnet.solana.com
       ;;
     6)
       anchor build

@@ -8,6 +8,14 @@ Emergent behavior: provably fair economic agents enabled by verified inference +
 - Anchor CLI installed
 - Node.js 18+ with Yarn (corepack or global yarn)
 
+## Network (testnet)
+Anchor is configured for testnet. For CLI and airdrop:
+```bash
+solana config set --url https://api.testnet.solana.com
+solana airdrop 1 --url https://api.testnet.solana.com
+solana balance --url https://api.testnet.solana.com
+```
+
 ## Menu options (scripts/menu.sh)
 
 0) Install dependencies (apt + yarn)
@@ -39,10 +47,10 @@ Emergent behavior: provably fair economic agents enabled by verified inference +
      ```bash
      yarn ts-node scripts/match/verify_match_receipt.ts <MATCH_PDA>
      ```
-5) Check champion balance (devnet) (uses last_champion_pubkey.txt if empty)
+5) Check champion balance (testnet) (uses last_champion_pubkey.txt if empty)
    - Command:
      ```bash
-     solana balance <PUBKEY> --url https://api.devnet.solana.com
+     solana balance <PUBKEY> --url https://api.testnet.solana.com
      ```
   6) Build + deploy (after .env is set)
    - Commands:
@@ -157,4 +165,3 @@ Example run (devnet, tournament demo)
 - Semi final 2: 9TpNi44Ac9VA4Eo4KRXV232LpcX3XHA7fDkD5f9fFHSV
 - Final match: 2VBqVcZdvPqnnH9aVMRNjJbsfHsaniHRpyV8RtandL2Z
 - Champion: BJnbMvEfa5byaMeVt7cAz3RB65jHyS5oQN4qoQooSa1s
-
