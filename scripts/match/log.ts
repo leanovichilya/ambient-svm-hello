@@ -13,6 +13,13 @@ export function logMatchState(
   console.log("match_type:", match.matchType);
   console.log("stake_lamports:", match.stakeLamports);
   console.log("verdict:", match.verdict);
+  console.log("ai_recommendation:", match.aiRecommendation);
+  console.log("ai_uncertain:", match.aiUncertain);
+  console.log("ai_confidence_bps:", match.aiConfidenceBps);
+  console.log("human_confirmed:", match.humanConfirmed);
+  console.log("human_override:", match.humanOverride);
+  console.log("human_confirmer:", match.humanConfirmer.toBase58());
+  console.log("confirmed_slot:", match.confirmedSlot.toString());
   console.log("prompt_hash:", Buffer.from(match.promptHash).toString("hex"));
   console.log("receipt_root:", Buffer.from(match.receiptRoot).toString("hex"));
   console.log("model_id:", match.modelId);

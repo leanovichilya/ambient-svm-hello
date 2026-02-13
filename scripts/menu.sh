@@ -11,6 +11,7 @@ while true; do
   echo "5) Check champion balance (testnet) (uses last_champion_pubkey.txt if empty)"
   echo "6) Build + deploy (after .env is set)"
   echo "7) Run tests (anchor test)"
+  echo "8) Confirm match verdict (uses last_match_pda.txt if empty)"
   echo "q) Quit"
   read -r -p "> " choice
 
@@ -89,6 +90,26 @@ while true; do
       ;;
     7)
       anchor test
+      ;;
+    8)
+      read -r -p "Match PDA (enter for last): " pda
+      if [[ -z "$pda" && -f last_match_pda.txt ]]; then
+        pda="$(tr -d '[:space:]' < last_match_pda.txt)"
+        echo "Using last_match_pda.txt: $pda"
+      elif [[ -z "$pda" ]]; then
+        echo "last_match_pda.txt not found. Paste a Match PDA or create the file."
+        continue
+      fi
+      if [[ -z "$pda" || ${#pda} -lt 32 ]]; then
+        echo "Invalid pubkey"
+        continue
+      fi
+      read -r -p "Human verdict [A|B|Tie] (enter to accept AI recommendation): " verdict
+      if [[ -z "$verdict" ]]; then
+        yarn ts-node scripts/match/confirm_match.ts "$pda"
+      else
+        yarn ts-node scripts/match/confirm_match.ts "$pda" "$verdict"
+      fi
       ;;
     q)
       exit 0

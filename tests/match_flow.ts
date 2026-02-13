@@ -123,6 +123,17 @@ describe("match flow (devnet)", () => {
       .rpc();
 
     const mAfterFinalize: any = await (program as any).account.match.fetch(matchPda);
+    assert.equal(Number(mAfterFinalize.aiRecommendation), 1);
+    assert.equal(Number(mAfterFinalize.aiUncertain), 0);
+
+    await program.methods
+      .confirmMatch(1, false)
+      .accounts({
+        gameMatch: matchPda,
+        confirmer: playerA,
+      })
+      .rpc();
+
     await waitForSlot(provider, Number(mAfterFinalize.executeAfterSlot));
 
     await program.methods
@@ -139,8 +150,9 @@ describe("match flow (devnet)", () => {
       .rpc();
 
     const m: any = await (program as any).account.match.fetch(matchPda);
-    assert.equal(Number(m.status), 2);
+    assert.equal(Number(m.status), 3);
     assert.equal(Number(m.verdict), 1);
+    assert.equal(Number(m.humanConfirmed), 1);
   });
 
   it("execute before challenge window fails", async () => {
@@ -220,6 +232,14 @@ describe("match flow (devnet)", () => {
       })
       .rpc();
 
+    await program.methods
+      .confirmMatch(1, false)
+      .accounts({
+        gameMatch: matchPda,
+        confirmer: playerA,
+      })
+      .rpc();
+
     let failed = false;
     try {
       await program.methods
@@ -238,6 +258,108 @@ describe("match flow (devnet)", () => {
       failed = true;
       const msg = String(e);
       assert.include(msg, "ChallengePeriodActive");
+    }
+    assert.equal(failed, true);
+  });
+
+  it("execute without human confirmation fails", async () => {
+    const playerA = provider.wallet.publicKey;
+    const playerB = anchor.web3.Keypair.generate();
+    await fundWallet(provider, playerB.publicKey, FUND_PLAYER_B);
+
+    const judges = Array.from({ length: 3 }, () => anchor.web3.Keypair.generate());
+    for (const judge of judges) {
+      await fundWallet(provider, judge.publicKey, FUND_JUDGE);
+    }
+
+    const criteria = "Pick the more concrete and feasible plan.";
+    const inputA = "Plan A: deliver MVP in 2 weeks with a small scope and clear milestones.";
+    const inputB = "Plan B: deliver full product in 2 weeks with no timeline details.";
+    const extra = "If insufficient info, return Tie.";
+    const saltA = anchor.web3.Keypair.generate().secretKey.slice(0, 16);
+    const saltB = anchor.web3.Keypair.generate().secretKey.slice(0, 16);
+    const commitA = commitMatchInput(inputA, Buffer.from(saltA));
+    const commitB = commitMatchInput(inputB, Buffer.from(saltB));
+    const nonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
+    const matchPda = getMatchPda(program.programId, playerA, nonce);
+
+    await program.methods
+      .createMatch(
+        1,
+        criteria,
+        extra,
+        commitA as any,
+        commitB as any,
+        new anchor.BN(STAKE_LAMPORTS),
+        new anchor.BN(CHALLENGE_SLOTS),
+        nonce
+      )
+      .accounts({
+        playerA,
+        playerB: playerB.publicKey,
+      })
+      .signers([playerB])
+      .rpc();
+
+    await program.methods
+      .revealMatchInput(inputA, Buffer.from(saltA))
+      .accounts({
+        gameMatch: matchPda,
+        player: playerA,
+      })
+      .rpc();
+
+    await program.methods
+      .revealMatchInput(inputB, Buffer.from(saltB))
+      .accounts({
+        gameMatch: matchPda,
+        player: playerB.publicKey,
+      })
+      .signers([playerB])
+      .rpc();
+
+    const receiptRoot = new Array(32).fill(2);
+    const promptHash = new Array(32).fill(1);
+    for (const judge of judges) {
+      await program.methods
+        .submitMatchJudgeResult(1, receiptRoot as any, promptHash as any, "test-model")
+        .accounts({
+          gameMatch: matchPda,
+          judge: judge.publicKey,
+        })
+        .signers([judge])
+        .rpc();
+    }
+
+    await program.methods
+      .finalizeMatch()
+      .accounts({
+        gameMatch: matchPda,
+        finalizer: playerA,
+      })
+      .rpc();
+
+    const mAfterFinalize: any = await (program as any).account.match.fetch(matchPda);
+    await waitForSlot(provider, Number(mAfterFinalize.executeAfterSlot));
+
+    let failed = false;
+    try {
+      await program.methods
+        .executeMatch()
+        .accounts({
+          gameMatch: matchPda,
+          playerA,
+          playerB: playerB.publicKey,
+          judge0: judges[0].publicKey,
+          judge1: judges[1].publicKey,
+          judge2: judges[2].publicKey,
+          executor: playerA,
+        })
+        .rpc();
+    } catch (e: any) {
+      failed = true;
+      const msg = String(e);
+      assert.include(msg, "MatchNotConfirmed");
     }
     assert.equal(failed, true);
   });

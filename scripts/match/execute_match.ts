@@ -11,6 +11,10 @@ async function main() {
   const matchPda = new anchor.web3.PublicKey(matchPdaStr);
   const state = await fetchMatchState(program as any, matchPda);
   const m = state.match;
+  if (Number(m.humanConfirmed) !== 1) {
+    console.error("Match is not human-confirmed. Run scripts/match/confirm_match.ts first.");
+    process.exit(1);
+  }
   const executeAfter = getExecuteAfterSlot(m);
   const slot = await program.provider.connection.getSlot();
   if (executeAfter > slot) {

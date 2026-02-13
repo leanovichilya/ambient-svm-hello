@@ -1,5 +1,41 @@
 # Archive
 
+## Week 4: Provably Fair Match (Experiment #4)
+
+Scope:
+- verified inference + on-chain execution for match payouts.
+
+Week 4 behavior:
+1) Two players escrow stake.
+2) Players reveal committed inputs.
+3) Three AI judges submit results and receipts.
+4) `finalize_match` produced final verdict.
+5) `execute_match` paid winner (or refunded tie).
+
+Match types:
+- `1` contest
+- `2` auction
+- `3` simulation
+
+Week 4 key instructions:
+- `create_match`
+- `reveal_match_input`
+- `submit_match_judge_result`
+- `finalize_match`
+- `execute_match`
+
+Week 4 scripts:
+- `scripts/match/demo.ts`
+- `scripts/match/referee.ts`
+- `scripts/finalize_match.ts`
+- `scripts/match/execute_match.ts`
+- `scripts/match/read_match.ts`
+- `scripts/match/verify_match_receipt.ts`
+
+Week 4 notes:
+- AI output was treated as the final verdict after consensus.
+- In Week 5 this changed: AI is now recommendation-only, and execution requires `confirm_match`.
+
 ## Week 2: Stress the Edges (LLM as Judge)
 
 Goal: minimal on-chain "judge" flow that

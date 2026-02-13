@@ -54,6 +54,14 @@ export function getExecuteAfterSlot(match: any): number {
   return typeof raw?.toNumber === "function" ? raw.toNumber() : Number(raw ?? 0);
 }
 
+export function getAiRecommendation(match: any): number {
+  return Number(match.aiRecommendation ?? 0);
+}
+
+export function getAiUncertain(match: any): boolean {
+  return Number(match.aiUncertain ?? 0) === 1;
+}
+
 export function getJudgeKeys(
   match: any,
   fallback: anchor.web3.PublicKey
@@ -167,15 +175,48 @@ export async function finalizeAndExecuteMatch(params: {
   playerB: anchor.web3.PublicKey;
   judges: anchor.web3.PublicKey[];
   finalizer: anchor.web3.PublicKey;
+  confirmer: anchor.web3.PublicKey;
+  confirmerSigner?: anchor.web3.Keypair;
   executor: anchor.web3.PublicKey;
+  confirmedVerdict?: number;
+  acknowledgeOverride?: boolean;
 }) {
-  const { program, matchPda, playerA, playerB, judges, finalizer, executor } = params;
+  const {
+    program,
+    matchPda,
+    playerA,
+    playerB,
+    judges,
+    finalizer,
+    confirmer,
+    confirmerSigner,
+    executor,
+    confirmedVerdict,
+    acknowledgeOverride,
+  } = params;
   await program.methods
     .finalizeMatch()
     .accounts({
       gameMatch: matchPda,
       finalizer,
     })
+    .rpc();
+
+  const finalizedState = await fetchMatchState(program as any, matchPda);
+  const aiRecommendation = getAiRecommendation(finalizedState.match);
+  const aiUncertain = getAiUncertain(finalizedState.match);
+  const verdict = confirmedVerdict ?? aiRecommendation;
+  if (verdict < 1 || verdict > 3) {
+    throw new Error("Invalid confirm verdict");
+  }
+
+  await program.methods
+    .confirmMatch(verdict, acknowledgeOverride ?? (aiUncertain || verdict !== aiRecommendation))
+    .accounts({
+      gameMatch: matchPda,
+      confirmer,
+    })
+    .signers(confirmerSigner ? [confirmerSigner] : [])
     .rpc();
 
   await waitForExecuteSlot(program, matchPda);

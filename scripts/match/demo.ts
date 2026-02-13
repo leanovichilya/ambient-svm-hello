@@ -93,6 +93,7 @@ async function main() {
     playerB: playerB.publicKey,
     judges: judges.map((j) => j.publicKey),
     finalizer: playerA,
+    confirmer: playerA,
     executor: playerA,
   });
 

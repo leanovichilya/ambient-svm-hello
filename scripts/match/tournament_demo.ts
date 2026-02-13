@@ -31,28 +31,28 @@ async function main() {
   const inputB = MATCH_DEFAULT_INPUT_B;
   const extra = MATCH_DEFAULT_EXTRA;
 
-  const semi1 = await runMatch(
-    program as any,
-    players[0],
-    players[1],
+  const semi1 = await runMatch({
+    program: program as any,
+    playerA: players[0],
+    playerB: players[1],
     criteria,
     inputA,
     inputB,
     extra,
-    AMBIENT_API_KEY,
-    MODEL_ID
-  );
-  const semi2 = await runMatch(
-    program as any,
-    players[2],
-    players[3],
+    ambientApiKey: AMBIENT_API_KEY,
+    modelId: MODEL_ID,
+  });
+  const semi2 = await runMatch({
+    program: program as any,
+    playerA: players[2],
+    playerB: players[3],
     criteria,
     inputA,
     inputB,
     extra,
-    AMBIENT_API_KEY,
-    MODEL_ID
-  );
+    ambientApiKey: AMBIENT_API_KEY,
+    modelId: MODEL_ID,
+  });
 
   if (!semi1.winner || !semi2.winner) {
     console.log("Tournament ended in a tie in semifinals.");
@@ -65,17 +65,17 @@ async function main() {
     console.error("Could not resolve semifinal winners");
     process.exit(1);
   }
-  const finalMatch = await runMatch(
-    program as any,
-    winner1,
-    winner2,
+  const finalMatch = await runMatch({
+    program: program as any,
+    playerA: winner1,
+    playerB: winner2,
     criteria,
     inputA,
     inputB,
     extra,
-    AMBIENT_API_KEY,
-    MODEL_ID
-  );
+    ambientApiKey: AMBIENT_API_KEY,
+    modelId: MODEL_ID,
+  });
 
   console.log("semi_final_1:", semi1.matchPda.toBase58());
   console.log("semi_final_2:", semi2.matchPda.toBase58());

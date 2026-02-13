@@ -85,6 +85,8 @@ export async function runMatch(params: {
     playerB: playerB.publicKey,
     judges: judges.map((j) => j.publicKey),
     finalizer: (program.provider as anchor.AnchorProvider).wallet.publicKey,
+    confirmer: playerA.publicKey,
+    confirmerSigner: playerA,
     executor: provider.wallet.publicKey,
   });
 

@@ -441,6 +441,13 @@ pub mod ambient_svm_hello {
         m.match_type = match_type;
         m.stake_lamports = stake_lamports;
         m.verdict = 0;
+        m.ai_recommendation = 0;
+        m.ai_uncertain = 0;
+        m.ai_confidence_bps = 0;
+        m.human_confirmed = 0;
+        m.human_override = 0;
+        m.human_confirmer = Pubkey::default();
+        m.confirmed_slot = 0;
         m.prompt_hash = [0u8; 32];
         m.receipt_root = [0u8; 32];
         m.model_id = String::new();
@@ -565,28 +572,38 @@ pub mod ambient_svm_hello {
         require!(m.status == 0, ErrorCode::MatchAlreadyFinalized);
         let now = Clock::get()?.unix_timestamp;
 
-        let verdict = if m.revealed_a == 1 && m.revealed_b == 1 {
+        let (ai_recommendation, ai_uncertain, ai_confidence_bps) =
+            if m.revealed_a == 1 && m.revealed_b == 1 {
             let total = m.judge_a as u16 + m.judge_b as u16 + m.judge_tie as u16;
             require!(total == 3, ErrorCode::NotEnoughJudges);
-            if m.judge_a >= 2 {
-                1
+            if m.judge_a == 3 {
+                (1, 0, 10_000)
+            } else if m.judge_b == 3 {
+                (2, 0, 10_000)
+            } else if m.judge_tie >= 2 {
+                (3, 1, 10_000)
+            } else if m.judge_a >= 2 {
+                (1, 1, 6_667)
             } else if m.judge_b >= 2 {
-                2
+                (2, 1, 6_667)
             } else {
-                3
+                (3, 1, 0)
             }
         } else {
             require!(now > m.reveal_deadline, ErrorCode::RevealWindowActive);
             if m.revealed_a == 1 && m.revealed_b == 0 {
-                1
+                (1, 0, 10_000)
             } else if m.revealed_b == 1 && m.revealed_a == 0 {
-                2
+                (2, 0, 10_000)
             } else {
-                3
+                (3, 0, 10_000)
             }
         };
 
-        m.verdict = verdict;
+        m.ai_recommendation = ai_recommendation;
+        m.ai_uncertain = ai_uncertain;
+        m.ai_confidence_bps = ai_confidence_bps;
+        m.verdict = 0;
         m.status = 1;
         let slot = Clock::get()?.slot;
         m.finalized_slot = slot;
@@ -595,9 +612,41 @@ pub mod ambient_svm_hello {
         Ok(())
     }
 
+    pub fn confirm_match(
+        ctx: Context<ConfirmMatch>,
+        verdict: u8,
+        acknowledge_override: bool,
+    ) -> Result<()> {
+        require!(verdict >= 1 && verdict <= 3, ErrorCode::BadMatchVerdict);
+        let m = &mut ctx.accounts.game_match;
+        require!(m.status == 1, ErrorCode::MatchNotAwaitingConfirmation);
+        require!(m.human_confirmed == 0, ErrorCode::MatchAlreadyConfirmed);
+
+        let confirmer = ctx.accounts.confirmer.key();
+        require!(
+            confirmer == m.player_a || confirmer == m.player_b,
+            ErrorCode::BadMatchPlayer
+        );
+
+        let override_used = verdict != m.ai_recommendation;
+        if m.ai_uncertain == 1 || override_used {
+            require!(acknowledge_override, ErrorCode::HumanAckRequired);
+        }
+
+        m.verdict = verdict;
+        m.human_confirmed = 1;
+        m.human_override = if override_used { 1 } else { 0 };
+        m.human_confirmer = confirmer;
+        m.confirmed_slot = Clock::get()?.slot;
+        m.status = 2;
+
+        Ok(())
+    }
+
     pub fn execute_match(ctx: Context<ExecuteMatch>) -> Result<()> {
         let m = &mut ctx.accounts.game_match;
-        require!(m.status == 1, ErrorCode::MatchNotFinalized);
+        require!(m.status == 2, ErrorCode::MatchNotConfirmed);
+        require!(m.human_confirmed == 1, ErrorCode::MatchNotConfirmed);
         let slot = Clock::get()?.slot;
         require!(slot >= m.execute_after_slot, ErrorCode::ChallengePeriodActive);
         require_keys_eq!(m.player_a, ctx.accounts.player_a.key(), ErrorCode::BadMatchPlayer);
@@ -709,7 +758,7 @@ pub mod ambient_svm_hello {
             }
         }
 
-        m.status = 2;
+        m.status = 3;
         m.executor = ctx.accounts.executor.key();
 
         Ok(())
@@ -961,7 +1010,7 @@ pub struct CompleteAction<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(match_type: u8, criteria: String, extra: String, commit_a: [u8; 32], commit_b: [u8; 32], stake_lamports: u64, challenge_period_secs: i64, nonce: u64)]
+#[instruction(match_type: u8, criteria: String, extra: String, commit_a: [u8; 32], commit_b: [u8; 32], stake_lamports: u64, challenge_period_slots: u64, nonce: u64)]
 pub struct CreateMatch<'info> {
     #[account(
         init,
@@ -1022,6 +1071,13 @@ pub struct FinalizeMatch<'info> {
     #[account(mut)]
     pub game_match: Account<'info, Match>,
     pub finalizer: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ConfirmMatch<'info> {
+    #[account(mut)]
+    pub game_match: Account<'info, Match>,
+    pub confirmer: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -1258,6 +1314,13 @@ pub struct Match {
     pub match_type: u8,
     pub stake_lamports: u64,
     pub verdict: u8,
+    pub ai_recommendation: u8,
+    pub ai_uncertain: u8,
+    pub ai_confidence_bps: u16,
+    pub human_confirmed: u8,
+    pub human_override: u8,
+    pub human_confirmer: Pubkey,
+    pub confirmed_slot: u64,
     pub prompt_hash: [u8; 32],
     pub receipt_root: [u8; 32],
     pub model_id: String,
@@ -1292,6 +1355,13 @@ impl Match {
         + 1
         + 8
         + 1
+        + 1
+        + 1
+        + 2
+        + 1
+        + 1
+        + 32
+        + 8
         + 32
         + 32
         + 4 + MAX_MODEL_ID_LEN
@@ -1393,6 +1463,12 @@ pub enum ErrorCode {
     MatchAlreadyFinalized,
     #[msg("Match not finalized")]
     MatchNotFinalized,
+    #[msg("Match not awaiting confirmation")]
+    MatchNotAwaitingConfirmation,
+    #[msg("Match not confirmed by human")]
+    MatchNotConfirmed,
+    #[msg("Match already confirmed")]
+    MatchAlreadyConfirmed,
     #[msg("Match not revealed")]
     MatchNotRevealed,
     #[msg("Bad match verdict")]
@@ -1419,4 +1495,6 @@ pub enum ErrorCode {
     SaltTooLong,
     #[msg("Challenge period active")]
     ChallengePeriodActive,
+    #[msg("Human acknowledgement required")]
+    HumanAckRequired,
 }
