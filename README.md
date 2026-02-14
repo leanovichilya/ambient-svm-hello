@@ -32,21 +32,35 @@ Important:
 - scripts use `AnchorProvider.env()`, so `ANCHOR_PROVIDER_URL` and `ANCHOR_WALLET` come from environment.
 - exported shell variables override `.env`.
 
-Recommended testnet values:
+Recommended Ambient RPC values:
 ```bash
-ANCHOR_PROVIDER_URL="https://api.testnet.solana.com"
+ANCHOR_PROVIDER_URL="https://rpc.ambient.xyz"
 ANCHOR_WALLET="/home/crypto/.config/solana/ambient-id-home.json"
+```
+
+## Ambient RPC + wallet check (`...S5MiCKe`)
+```bash
+# expected pubkey suffix: ...S5MiCKe
+solana-keygen pubkey /home/crypto/.config/solana/ambient-id-home.json
+
+# check what is set in .env
+rg '^ANCHOR_PROVIDER_URL=|^ANCHOR_WALLET=' .env
+
+# quick RPC connectivity check with explicit override
+ANCHOR_PROVIDER_URL="https://rpc.ambient.xyz" \
+ANCHOR_WALLET="/home/crypto/.config/solana/ambient-id-home.json" \
+solana -u https://rpc.ambient.xyz block-height
 ```
 
 ## Build and deploy
 ```bash
 anchor build
-anchor deploy --provider.cluster https://api.testnet.solana.com --provider.wallet /home/crypto/.config/solana/ambient-id-home.json --no-idl
+anchor deploy --provider.cluster https://rpc.ambient.xyz --provider.wallet /home/crypto/.config/solana/ambient-id-home.json --no-idl
 ```
 
 ## Quick run (end-to-end)
 ```bash
-ANCHOR_PROVIDER_URL="https://api.testnet.solana.com" \
+ANCHOR_PROVIDER_URL="https://rpc.ambient.xyz" \
 ANCHOR_WALLET="/home/crypto/.config/solana/ambient-id-home.json" \
 yarn ts-node scripts/match/demo.ts
 ```
